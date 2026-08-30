@@ -1,0 +1,33 @@
+{
+  "name": "com.sonicgameworld.sdk",
+  "version": "1.0.0",
+  "displayName": "Sonic GameWorld SDK",
+  "description": "Official Unity SDK for Sonic GameWorld OS — the spatial operating system for creating, publishing, discovering, and monetizing interactive worlds. Authenticate, browse and import from the GameWorld Marketplace, load GameWorld Asset Format worlds into scenes, drive worlds with GameWorld AI, and read/write cloud saves, sessions and leaderboards, all from inside the Unity Editor and at runtime.",
+  "unity": "2022.3",
+  "documentationUrl": "https://developer.sonicgameworld.com/docs/unity",
+  "changelogUrl": "https://developer.sonicgameworld.com/docs/unity/changelog",
+  "licensesUrl": "https://sonicgameworld.com/legal/sdk-license",
+  "keywords": [
+    "gameworld",
+    "sonic-gameworld",
+    "marketplace",
+    "ai",
+    "spatial",
+    "ugc",
+    "networking"
+  ],
+  "author": {
+    "name": "Sonic GameWorld",
+    "url": "https://sonicgameworld.com"
+  },
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  },
+  "samples": [
+    {
+      "displayName": "Quick Start",
+      "description": "Minimal scene showing login, marketplace search, and loading a world.",
+      "path": "Samples~/QuickStart"
+    }
+  ]
+}

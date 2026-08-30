@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://gameworld:gameworld@localhost:5432/gameworld?schema=public
+  REDIS_URL: redis://localhost:6379
+  JWT_SECRET: ci-test-secret-not-for-production
+  EVENT_BUS_DRIVER: memory
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      # Same image as docker-compose.yml's `postgres` service, so CI matches local dev exactly.
+      # postgis/postgis ships PostGIS but not pgvector — the "Install Postgres extensions" step
+      # below adds pgvector from the same apt.postgresql.org repo the base postgres image already
+      # configures, so both extensions used by prisma/schema.prisma (§10 — PostGIS on
+      # WorldRegion.geom, pgvector on SearchDocument.embedding) are available before migrations run.
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: gameworld
+          POSTGRES_PASSWORD: gameworld
+          POSTGRES_DB: gameworld
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gameworld"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Postgres extensions (postgis already present; add pgvector)
+        run: |
+          docker exec "${{ job.services.postgres.id }}" bash -c "apt-get update -qq && apt-get install -y --no-install-recommends postgresql-16-pgvector"
+          docker exec "${{ job.services.postgres.id }}" psql -U gameworld -d gameworld -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          docker exec "${{ job.services.postgres.id }}" psql -U gameworld -d gameworld -c "CREATE EXTENSION IF NOT EXISTS vector;"
+
+      - name: Enable corepack (pnpm)
+        run: corepack enable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `prisma generate` needs internet access to fetch query-engine binaries from
+      # binaries.prisma.sh — available on GitHub-hosted runners; this is expected to work here.
+      - name: Prisma generate (api + every worker's own client)
+        run: pnpm -r --if-present run prisma:generate
+
+      - name: Prisma migrate deploy
+        run: pnpm --filter @sonic-gameworld/api run prisma:deploy
+
+      - name: Typecheck
+        run: pnpm turbo run typecheck
+
+      - name: Test
+        run: pnpm turbo run test
+
+      - name: Build
+        run: pnpm turbo run build
+
+      - name: Lint
+        run: pnpm turbo run lint
+        continue-on-error: true

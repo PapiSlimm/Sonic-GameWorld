@@ -1,0 +1,37 @@
+{
+  "name": "@sonic-gameworld/worker-analytics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist",
+    "prisma:generate": "prisma generate"
+  },
+  "prisma": {
+    "schema": "../../services/api/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@sonic-gameworld/world-schema": "workspace:*",
+    "@sonic-gameworld/events": "workspace:*",
+    "bullmq": "^5.34.0",
+    "ioredis": "^5.4.1",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.1",
+    "@prisma/client": "^6.1.0",
+    "@opensearch-project/opensearch": "^2.12.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "@types/node": "^22.10.2",
+    "prisma": "^6.1.0"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Global Dominance RTS",
+  "description": "Tactical Real-Time Strategy game with group waypoint-following pathfinding, steering separation behavior, shift-click command queue, minimap, and active notifications HUD.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

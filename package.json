@@ -1,0 +1,39 @@
+{
+  "name": "sonic-gameworld",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sonic GameWorld OS — The Spatial Operating System for Creating, Publishing, Discovering, and Monetizing Interactive Worlds.",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "db:generate": "pnpm --filter @sonic-gameworld/api prisma:generate",
+    "db:migrate": "pnpm --filter @sonic-gameworld/api prisma:migrate",
+    "db:seed": "pnpm --filter @sonic-gameworld/api prisma:seed",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp",
+      "protobufjs",
+      "@firebase/util",
+      "unrs-resolver"
+    ]
+  }
+}

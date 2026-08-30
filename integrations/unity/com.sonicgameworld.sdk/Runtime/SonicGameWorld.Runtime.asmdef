@@ -1,0 +1,22 @@
+{
+  "name": "SonicGameWorld.Runtime",
+  "rootNamespace": "SonicGameWorld",
+  "references": [
+    "Unity.Nuget.Newtonsoft-Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [
+    {
+      "name": "com.unity.cloud.gltfast",
+      "expression": "",
+      "define": "GAMEWORLD_GLTFAST"
+    }
+  ],
+  "noEngineReferences": false
+}

@@ -1,0 +1,21 @@
+[
+  {
+    "origin": [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:3002",
+      "http://localhost:3003",
+      "http://localhost:3004",
+      "http://localhost:3005",
+      "https://studio.sonicgameworld.com",
+      "https://marketplace.sonicgameworld.com",
+      "https://play.sonicgameworld.com",
+      "https://creator.sonicgameworld.com",
+      "https://admin.sonicgameworld.com",
+      "https://developer.sonicgameworld.com"
+    ],
+    "method": ["GET", "PUT", "HEAD"],
+    "responseHeader": ["Content-Type", "ETag", "x-goog-meta-*"],
+    "maxAgeSeconds": 3600
+  }
+]

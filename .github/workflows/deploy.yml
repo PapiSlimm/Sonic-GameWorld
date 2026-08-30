@@ -1,0 +1,66 @@
+name: Deploy
+
+# Render Blueprint services (render.yaml) can auto-deploy on push by themselves once connected to
+# this repo, but that races: Render would start building `main` immediately on push, without
+# waiting for CI to pass first. This workflow instead triggers each service's Render Deploy Hook
+# only after CI (ci.yml) has succeeded on `main`, so a broken build never reaches Render.
+#
+# Setup: for each Render service, go to its Dashboard > Settings > Deploy Hook, copy the URL, and
+# add it as a repository secret with the matching name below (Settings > Secrets and variables >
+# Actions). A hook is safe to leave unset — the corresponding step below is skipped, not failed —
+# so this workflow works incrementally as services come online.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Deploy one service only (matches a job name below), or leave blank for all"
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - run: echo "CI passed (or manual dispatch) — proceeding to deploy."
+
+  deploy:
+    needs: guard
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - { name: gameworld-api, secret: RENDER_DEPLOY_HOOK_API }
+          - { name: gameworld-workers, secret: RENDER_DEPLOY_HOOK_WORKERS }
+          - { name: gameworld-studio, secret: RENDER_DEPLOY_HOOK_STUDIO }
+          - { name: gameworld-marketplace, secret: RENDER_DEPLOY_HOOK_MARKETPLACE }
+          - { name: gameworld-player, secret: RENDER_DEPLOY_HOOK_PLAYER }
+          - { name: gameworld-creator, secret: RENDER_DEPLOY_HOOK_CREATOR }
+          - { name: gameworld-admin, secret: RENDER_DEPLOY_HOOK_ADMIN }
+          - { name: gameworld-developer-portal, secret: RENDER_DEPLOY_HOOK_DEVELOPER_PORTAL }
+    steps:
+      - name: Deploy ${{ matrix.service.name }}
+        if: ${{ (github.event.inputs.service == '' || github.event.inputs.service == matrix.service.name) }}
+        env:
+          HOOK_URL: ${{ secrets[matrix.service.secret] }}
+        run: |
+          if [ -z "${HOOK_URL:-}" ]; then
+            echo "::notice::${{ matrix.service.secret }} is not set — skipping ${{ matrix.service.name }} (add the secret once this service exists on Render)."
+            exit 0
+          fi
+          echo "Triggering Render deploy for ${{ matrix.service.name }}"
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" -X POST "$HOOK_URL")
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            echo "::error::Render deploy hook for ${{ matrix.service.name }} returned HTTP $status"
+            exit 1
+          fi

@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: gameworld
+      POSTGRES_PASSWORD: gameworld
+      POSTGRES_DB: gameworld
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gameworld"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes: ["redisdata:/data"]
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports: ["9200:9200"]
+    volumes: ["osdata:/usr/share/opensearch/data"]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio12345
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/data"]
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on: [minio]
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://minio:9000 minio minio12345;
+      mc mb -p local/gameworld-assets || true;
+      mc anonymous set download local/gameworld-assets;
+      exit 0;"
+
+  api:
+    build: { context: ., dockerfile: infrastructure/docker/api.Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://gameworld:gameworld@postgres:5432/gameworld?schema=public
+      REDIS_URL: redis://redis:6379
+      OPENSEARCH_URL: http://opensearch:9200
+      S3_ENDPOINT: http://minio:9000
+    ports: ["4000:4000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_started }
+    profiles: ["full"]
+
+  workers:
+    build: { context: ., dockerfile: infrastructure/docker/workers.Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://gameworld:gameworld@postgres:5432/gameworld?schema=public
+      REDIS_URL: redis://redis:6379
+      S3_ENDPOINT: http://minio:9000
+    depends_on: [postgres, redis, minio]
+    profiles: ["full"]
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  osdata: {}
+  miniodata: {}

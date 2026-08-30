@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars (gitignored) and fill in. Never commit real secret values.
+
+project_id            = "sonic-gameworld-prod"
+region                = "us-east1"
+environment           = "prod"
+terraform_runner_cidr = "203.0.113.10/32" # your machine's / CI runner's public IP
+
+assets_bucket_name = "gameworld-assets-prod"
+cdn_domain         = "cdn.sonicgameworld.com"
+
+image_tag = "latest" # prefer a git SHA in CI
+
+# ---- secrets — better supplied via `-var` / CI secret store than a checked-in file ----
+jwt_secret                     = "CHANGE-ME-64-char-random-string"
+stripe_secret_key              = ""
+stripe_webhook_secret          = ""
+anthropic_api_key              = ""
+gemini_api_key                 = ""
+firebase_service_account_json  = ""

@@ -1,0 +1,30 @@
+{
+  "CORSRules": [
+    {
+      "ID": "gameworld-web-apps-upload",
+      "AllowedOrigins": [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://localhost:3004",
+        "http://localhost:3005",
+        "https://studio.sonicgameworld.com",
+        "https://marketplace.sonicgameworld.com",
+        "https://play.sonicgameworld.com",
+        "https://creator.sonicgameworld.com",
+        "https://admin.sonicgameworld.com",
+        "https://developer.sonicgameworld.com"
+      ],
+      "AllowedMethods": ["GET", "PUT", "HEAD"],
+      "AllowedHeaders": [
+        "Content-Type",
+        "Content-MD5",
+        "x-amz-acl",
+        "x-amz-meta-*"
+      ],
+      "ExposeHeaders": ["ETag"],
+      "MaxAgeSeconds": 3600
+    }
+  ]
+}

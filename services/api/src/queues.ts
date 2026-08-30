@@ -1,0 +1,124 @@
+// BullMQ job producers (CONTRACTS.md §13): this service only ever *enqueues* — the six worker
+// packages under workers/ own consumption. Decorated as `app.queues`; see src/types.ts for the
+// FastifyInstance augmentation.
+//
+// Payload shapes below are hand-mirrored from each worker's `src/types.ts` rather than imported
+// from the worker package: none of the worker packages emit `.d.ts` output (their
+// `tsconfig.json` sets `declaration: false` and nothing overrides it back in `tsconfig.build.
+// json`), and none declare a `types`/`exports` field pointing at source — so `import type
+// { GenerateJobPayload } from '@sonic-gameworld/worker-ai-generation'` has nothing to resolve
+// against and does not typecheck. Keep each interface below in sync with its worker's
+// `src/types.ts` by hand.
+import fp from 'fastify-plugin';
+import { Queue, type JobsOptions } from 'bullmq';
+import { QUEUE_NAMES, type EngineTarget, type LicenseRecord, type WorldDocument } from '@sonic-gameworld/world-schema';
+import type { AIAgentRole, AIToolName } from '@sonic-gameworld/ai-sdk';
+import type { FastifyInstance } from 'fastify';
+
+// ---- Payload shapes (mirrors workers/*/src/types.ts) ----
+
+/** Mirrors workers/asset-processing/src/types.ts `JobPayload`. */
+export interface AssetProcessJobPayload {
+  assetId: string;
+  versionId: string;
+  fileKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  creatorId?: string;
+  resumeFromIndex?: number;
+  forceApprove?: boolean;
+}
+
+/** Mirrors workers/ai-generation/src/types.ts `GenerateJobPayload`. */
+export interface AiGenerateJobPayload {
+  worldId?: string;
+  actorId?: string;
+  orgId?: string;
+  tool: AIToolName;
+  role?: AIAgentRole;
+  prompt: string;
+  args?: Record<string, unknown>;
+}
+
+/** Mirrors workers/builds/src/types.ts `BuildJobPayload`. */
+export interface BuildCompileJobPayload {
+  gameId: string;
+  gameVersionId: string;
+  worldId: string;
+  worldVersionId?: string;
+  worldDocument?: WorldDocument;
+  engines: EngineTarget[];
+  requestedBy?: string;
+}
+
+/** Mirrors workers/moderation/src/types.ts `ModerationJobPayload`. */
+export interface ModerationScanJobPayload {
+  refKind: 'ASSET' | 'PRODUCT' | 'WORLD' | 'GAME' | 'REVIEW' | 'USER' | 'NPC';
+  refId: string;
+  reporterId?: string;
+  reason?: string;
+  content?: { text?: string; fileKey?: string; fileName?: string };
+  licenses?: LicenseRecord[];
+  itemId?: string;
+  resumeFromIndex?: number;
+  resolution?: 'APPROVED' | 'REJECTED';
+}
+
+/** Mirrors workers/analytics/src/types.ts `RollupJobPayload`. */
+export interface AnalyticsRollupJobPayload {
+  periodStart?: string;
+  periodEnd?: string;
+}
+
+/** The position of `HUMAN_REVIEW` in `MODERATION_STAGE_NAMES`
+ * (workers/moderation/src/types.ts) — used to resume a paused moderation job after
+ * `POST /moderation/:id/resolve`. Kept as a named constant here rather than a magic `4` at every
+ * call site. */
+export const MODERATION_HUMAN_REVIEW_STAGE_INDEX = 4;
+
+// ---- The decorator surface ----
+
+/** Narrow producer-only surface of a BullMQ `Queue<T>` — just `.add()`. Deliberately not the
+ * concrete `Queue<T>` class type: BullMQ's `Queue` has private/protected members, so a plain test
+ * double could never structurally satisfy it. Every route only ever needs `.add()`, and a real
+ * `Queue<T>` instance satisfies this interface structurally, so `buildQueues()` below can hand one
+ * out unchanged. */
+export interface QueueLike<T> {
+  add(name: string, data: T, opts?: JobsOptions): Promise<{ id?: string; name: string; data: T }>;
+}
+
+export interface Queues {
+  assetProcess: QueueLike<AssetProcessJobPayload>;
+  aiGenerate: QueueLike<AiGenerateJobPayload>;
+  buildCompile: QueueLike<BuildCompileJobPayload>;
+  moderationScan: QueueLike<ModerationScanJobPayload>;
+  analyticsRollup: QueueLike<AnalyticsRollupJobPayload>;
+}
+
+let testOverride: Queues | undefined;
+
+/** Test hook (mirrors `setPrismaForTests`/`setBusForTests`): inject a fake `Queues` so unit tests
+ * never open a real Redis connection. Call with `undefined` to clear the override. */
+export function setQueuesForTests(fake: Queues | undefined): void {
+  testOverride = fake;
+}
+
+function buildQueues(app: FastifyInstance): Queues {
+  const connection = app.redis;
+  return {
+    assetProcess: new Queue<AssetProcessJobPayload>(QUEUE_NAMES.ASSET_PROCESS, { connection }),
+    aiGenerate: new Queue<AiGenerateJobPayload>(QUEUE_NAMES.AI_GENERATE, { connection }),
+    buildCompile: new Queue<BuildCompileJobPayload>(QUEUE_NAMES.BUILD_COMPILE, { connection }),
+    moderationScan: new Queue<ModerationScanJobPayload>(QUEUE_NAMES.MODERATION_SCAN, { connection }),
+    analyticsRollup: new Queue<AnalyticsRollupJobPayload>(QUEUE_NAMES.ANALYTICS_ROLLUP, { connection }),
+  };
+}
+
+// NOTE: must be registered after `app.decorate('redis', ...)` has run (see src/app.ts) — real
+// `Queue` construction below reads `app.redis` eagerly, once.
+async function queuesPlugin(app: FastifyInstance): Promise<void> {
+  app.decorate('queues', testOverride ?? buildQueues(app));
+}
+
+export default fp(queuesPlugin, { name: 'queues' });

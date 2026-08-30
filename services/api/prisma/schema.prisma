@@ -1,0 +1,1355 @@
+// Sonic GameWorld OS — API data model
+// See docs/CONTRACTS.md §10 ("Prisma data model") for the binding contract.
+// Do not hand-edit generated artifacts; edit this file and re-run `prisma generate` / `prisma migrate`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =========================================================================
+// Enums
+// =========================================================================
+
+enum Role {
+  owner
+  admin
+  editor
+  viewer
+  player
+  moderator
+  platform_admin
+}
+
+enum PlanTier {
+  STARTER
+  CREATOR
+  PRO
+  STUDIO
+  ENTERPRISE
+}
+
+enum ProductCategory {
+  WORLD
+  GAME_KIT
+  SYSTEM
+  AI_AGENT
+  CHARACTER
+  VEHICLE
+  ENVIRONMENT
+  CINEMATIC
+  MISSION
+  EXPERIENCE
+}
+
+enum Genre {
+  FANTASY
+  SCIFI
+  HORROR
+  STRATEGY
+  SHOOTER
+  RACING
+  RPG
+  MMO
+  SURVIVAL
+  TACTICAL
+  OPEN_WORLD
+  CYBERPUNK
+  OTHER
+}
+
+enum EngineTarget {
+  WEB
+  UNITY
+  UNREAL
+  GODOT
+}
+
+enum SpatialLevel {
+  WORLD
+  CITY
+  DISTRICT
+  BUILDING
+  ROOM
+  ASSET
+}
+
+enum AssetVariant {
+  ULTRA
+  HIGH
+  MEDIUM
+  LOW
+  MOBILE
+  WEB
+}
+
+enum WorldStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum GameStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SessionStatus {
+  LOBBY
+  RUNNING
+  ENDED
+}
+
+enum AssetStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  PUBLISHED
+  REJECTED
+}
+
+enum AssetType {
+  MODEL
+  TEXTURE
+  MATERIAL
+  AUDIO
+  VIDEO
+  ANIMATION
+  ARCHIVE
+  IMAGE
+  OTHER
+}
+
+enum LifecycleStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ProductStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  DELISTED
+  REJECTED
+}
+
+enum ProductRefKind {
+  ASSET
+  WORLD
+  GAME
+  NPC
+  MISSION
+  SYSTEM
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  CANCELLED
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum RoyaltyStatus {
+  ACCRUED
+  PAID
+  REVERSED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  TRIALING
+  INCOMPLETE
+}
+
+enum PaymentProvider {
+  STRIPE
+  MOCK
+  WALLET
+}
+
+enum ModerationRefKind {
+  ASSET
+  PRODUCT
+  WORLD
+  GAME
+  REVIEW
+  USER
+  NPC
+}
+
+enum ModerationStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  ESCALATED
+}
+
+enum ModerationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum IntegrationProvider {
+  UNITY
+  UNREAL
+  GODOT
+  WEB
+  STRIPE
+  FIREBASE
+  DISCORD
+  CUSTOM
+}
+
+enum IntegrationStatus {
+  AVAILABLE
+  CONNECTED
+  ERROR
+}
+
+enum GameServerStatus {
+  STARTING
+  READY
+  FULL
+  DRAINING
+  STOPPED
+}
+
+enum LiveEventType {
+  SEASON
+  TOURNAMENT
+  DROP
+  RAID
+  CUSTOM
+}
+
+enum LiveEventStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+enum MatchmakeStatus {
+  SEARCHING
+  MATCHED
+  TIMEOUT
+}
+
+enum AIToolName {
+  create_world
+  create_entity
+  modify_entity
+  delete_entity
+  modify_terrain
+  spawn_npc
+  create_quest
+  set_weather
+  set_time_of_day
+  move_camera
+  create_camera_rig
+  create_trigger
+  create_cinematic
+  set_layer_visibility
+  track_entity
+  publish_asset
+  query_world
+  generate_asset
+  run_playtest
+  analyze_players
+}
+
+enum AIAgentRole {
+  ORCHESTRATOR
+  BUILDER
+  DIRECTOR
+  DESIGNER
+  NPC
+  QUESTMASTER
+  CINEMATOGRAPHER
+  QA
+  ANALYST
+  PUBLISHER
+}
+
+// =========================================================================
+// Identity
+// =========================================================================
+
+model User {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  handle        String        @unique
+  displayName   String
+  avatarUrl     String?
+  bio           String?
+  tier          PlanTier      @default(STARTER)
+  roles         Role[]        @default([player])
+  orgId         String?
+  org           Organization? @relation("OrgMembers", fields: [orgId], references: [id])
+  emailVerified Boolean       @default(false)
+  passwordHash  String?
+  firebaseUid   String?       @unique
+  settings      Json?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  deletedAt     DateTime?
+
+  ownedOrgs        Organization[]      @relation("OrgOwner")
+  orgMemberships   OrgMember[]
+  apiKeys          ApiKey[]
+  refreshTokens    RefreshToken[]
+  creatorProfile   CreatorProfile?
+  worlds           World[]             @relation("WorldOwner")
+  games            Game[]              @relation("GameOwner")
+  assets           Asset[]             @relation("AssetCreator")
+  npcs             NPC[]               @relation("NPCOwner")
+  missions         Mission[]           @relation("MissionOwner")
+  orders           Order[]             @relation("OrderBuyer")
+  reviews          Review[]
+  wishlistItems    WishlistItem[]
+  cart             Cart?
+  notifications    Notification[]
+  webhooks         Webhook[]
+  subscriptions    Subscription[]
+  gameSessions     GameSessionPlayer[]
+  productLicenses  ProductLicense[]
+  aiExecutions     AIExecution[]
+  aiUsages         AIUsage[]
+  matchmakeTickets MatchmakeTicket[]
+  npcConversations NPCConversation[]
+
+  @@index([tier])
+  @@index([orgId])
+}
+
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  slug      String    @unique
+  tier      PlanTier  @default(STARTER)
+  ownerId   String
+  owner     User      @relation("OrgOwner", fields: [ownerId], references: [id])
+  logoUrl   String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  members       User[]         @relation("OrgMembers")
+  orgMembers    OrgMember[]
+  worlds        World[]        @relation("WorldOrg")
+  games         Game[]         @relation("GameOrg")
+  assets        Asset[]        @relation("AssetOrg")
+  subscriptions Subscription[]
+  aiUsages      AIUsage[]
+
+  @@index([ownerId])
+}
+
+model OrgMember {
+  id       String       @id @default(cuid())
+  orgId    String
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role
+  joinedAt DateTime     @default(now())
+
+  @@unique([orgId, userId])
+  @@index([userId])
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  prefix     String
+  hashedKey  String
+  scopes     String[]  @default([])
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
+  @@index([prefix])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+
+  @@index([userId])
+}
+
+// =========================================================================
+// Creator / Marketplace
+// =========================================================================
+
+model CreatorProfile {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  handle          String  @unique
+  displayName     String
+  bio             String?
+  avatarUrl       String?
+  bannerUrl       String?
+  website         String?
+  socials         Json?
+  verified        Boolean @default(false)
+  followers       Int     @default(0)
+  stripeAccountId String?
+
+  // Cached reputation breakdown (§14) — recomputed by analytics workers.
+  repScore       Float    @default(0)
+  repQuality     Float    @default(0)
+  repReliability Float    @default(0)
+  repSales       Float    @default(0)
+  repUpdates     Float    @default(0)
+  repReviews     Float    @default(0)
+  repSupport     Float    @default(0)
+  repOriginality Float    @default(0)
+  repCompliance  Float    @default(0)
+  repComputedAt  DateTime @default(now())
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  products        Product[]
+  payouts         Payout[]
+  royaltyAccruals RoyaltyAccrual[]
+
+  @@index([verified])
+}
+
+model Product {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  name            String
+  category        ProductCategory
+  genre           Genre[]         @default([])
+  engines         EngineTarget[]  @default([])
+  priceCents      Int
+  currency        String          @default("USD")
+  description     String
+  longDescription String?
+  tags            String[]        @default([])
+  previewUrls     String[]        @default([])
+  modelPreviewUrl String?
+  thumbnailUrl    String?
+  license         Json
+  refKind         ProductRefKind
+  refId           String
+  creatorId       String
+  creator         CreatorProfile  @relation(fields: [creatorId], references: [id])
+  status          ProductStatus   @default(DRAFT)
+  featured        Boolean         @default(false)
+  rating          Float           @default(0)
+  ratingCount     Int             @default(0)
+  sales           Int             @default(0)
+  publishedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  deletedAt       DateTime?
+
+  versions      ProductVersion[]
+  reviews       Review[]
+  licenses      ProductLicense[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  wishlistItems WishlistItem[]
+
+  @@index([category])
+  @@index([status])
+  @@index([creatorId])
+  @@index([refKind, refId])
+  @@index([featured])
+}
+
+model ProductVersion {
+  id             String   @id @default(cuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  version        String
+  changelog      String?
+  assetVersionId String?
+  worldVersionId String?
+  gameVersionId  String?
+  fileSizeBytes  Int?
+  createdAt      DateTime @default(now())
+
+  @@unique([productId, version])
+}
+
+model ProductLicense {
+  id        String    @id @default(cuid())
+  productId String
+  product   Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  buyerId   String?
+  buyer     User?     @relation(fields: [buyerId], references: [id])
+  record    Json
+  seats     Int?
+  grantedAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  @@index([productId])
+  @@index([buyerId])
+}
+
+model Review {
+  id               String    @id @default(cuid())
+  productId        String
+  product          Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  authorId         String
+  author           User      @relation(fields: [authorId], references: [id])
+  rating           Int
+  title            String?
+  body             String
+  verifiedPurchase Boolean   @default(false)
+  helpful          Int       @default(0)
+  creatorReplyBody String?
+  creatorReplyAt   DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([productId])
+  @@index([authorId])
+}
+
+model WishlistItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  addedAt   DateTime @default(now())
+
+  @@unique([userId, productId])
+}
+
+model Cart {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  discountCents Int      @default(0)
+  taxCents      Int      @default(0)
+  couponCode    String?
+  updatedAt     DateTime @updatedAt
+
+  items CartItem[]
+}
+
+model CartItem {
+  id             String   @id @default(cuid())
+  cartId         String
+  cart           Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  versionId      String?
+  quantity       Int      @default(1)
+  unitPriceCents Int
+  addedAt        DateTime @default(now())
+
+  @@index([cartId])
+}
+
+model Coupon {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  discountPct   Int?
+  discountCents Int?
+  active        Boolean   @default(true)
+  expiresAt     DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+model Order {
+  id              String          @id @default(cuid())
+  buyerId         String
+  buyer           User            @relation("OrderBuyer", fields: [buyerId], references: [id])
+  status          OrderStatus     @default(PENDING)
+  subtotalCents   Int
+  discountCents   Int             @default(0)
+  taxCents        Int             @default(0)
+  totalCents      Int
+  currency        String          @default("USD")
+  paymentProvider PaymentProvider @default(MOCK)
+  paymentRef      String?
+  couponCode      String?
+  createdAt       DateTime        @default(now())
+  paidAt          DateTime?
+  refundedAt      DateTime?
+
+  items    OrderItem[]
+  payments Payment[]
+
+  @@index([buyerId])
+  @@index([status])
+}
+
+model OrderItem {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  versionId      String?
+  quantity       Int      @default(1)
+  unitPriceCents Int
+  feeCents       Int      @default(0)
+  royaltyCents   Int      @default(0)
+  licenseId      String?
+  createdAt      DateTime @default(now())
+
+  royaltyAccruals RoyaltyAccrual[]
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+// =========================================================================
+// Worlds
+// =========================================================================
+
+model World {
+  id               String        @id @default(cuid())
+  ownerId          String
+  owner            User          @relation("WorldOwner", fields: [ownerId], references: [id])
+  orgId            String?
+  org              Organization? @relation("WorldOrg", fields: [orgId], references: [id])
+  name             String
+  slug             String        @unique
+  description      String        @default("")
+  genre            Genre[]       @default([])
+  status           WorldStatus   @default(DRAFT)
+  sizeKm2          Float         @default(1)
+  maxPlayers       Int           @default(16)
+  thumbnailUrl     String?
+  currentVersionId String?
+  entityCount      Int           @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  publishedAt      DateTime?
+  deletedAt        DateTime?
+
+  versions     WorldVersion[]
+  snapshots    WorldSnapshot[]
+  regions      WorldRegion[]
+  games        Game[]
+  npcs         NPC[]
+  missions     Mission[]
+  aiExecutions AIExecution[]
+  liveEvents   LiveEvent[]
+
+  @@index([ownerId])
+  @@index([orgId])
+  @@index([status])
+}
+
+model WorldVersion {
+  id        String   @id @default(cuid())
+  worldId   String
+  world     World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  version   String
+  document  Json
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@unique([worldId, version])
+  @@index([worldId])
+}
+
+model WorldSnapshot {
+  id          String   @id @default(cuid())
+  worldId     String
+  world       World    @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  versionId   String
+  label       String?
+  createdBy   String
+  entityCount Int      @default(0)
+  sizeBytes   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([worldId])
+}
+
+/// Spatial index rows for the WorldForge / spatial-discovery hierarchy (nullable geom so
+/// migrations succeed without the PostGIS extension present, e.g. in CI/test databases).
+model WorldRegion {
+  id        String                                 @id @default(cuid())
+  worldId   String
+  world     World                                  @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  name      String
+  level     SpatialLevel
+  geom      Unsupported("geometry(Polygon,4326)")?
+  metadata  Json?
+  createdAt DateTime                               @default(now())
+
+  @@index([worldId])
+  @@index([level])
+}
+
+// =========================================================================
+// Games
+// =========================================================================
+
+model Game {
+  id               String         @id @default(cuid())
+  worldId          String
+  world            World          @relation(fields: [worldId], references: [id])
+  ownerId          String
+  owner            User           @relation("GameOwner", fields: [ownerId], references: [id])
+  orgId            String?
+  org              Organization?  @relation("GameOrg", fields: [orgId], references: [id])
+  name             String
+  slug             String         @unique
+  description      String         @default("")
+  genre            Genre[]        @default([])
+  engines          EngineTarget[] @default([])
+  status           GameStatus     @default(DRAFT)
+  maxPlayers       Int            @default(16)
+  modes            String[]       @default([])
+  thumbnailUrl     String?
+  currentVersionId String?
+  playerCount      Int            @default(0)
+  rating           Float          @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  publishedAt      DateTime?
+  deletedAt        DateTime?
+
+  versions         GameVersion[]
+  sessions         GameSession[]
+  saves            GameSave[]
+  leaderboard      LeaderboardEntry[]
+  servers          GameServer[]
+  liveEvents       LiveEvent[]
+  matchmakeTickets MatchmakeTicket[]
+
+  @@index([worldId])
+  @@index([ownerId])
+  @@index([status])
+}
+
+model GameVersion {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  version   String
+  changelog String?
+  buildRef  Json?
+  createdAt DateTime @default(now())
+
+  @@unique([gameId, version])
+}
+
+model GameSession {
+  id         String        @id @default(cuid())
+  gameId     String
+  game       Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  hostId     String?
+  serverId   String?
+  status     SessionStatus @default(LOBBY)
+  mode       String?
+  region     String?
+  maxPlayers Int           @default(16)
+  startedAt  DateTime?
+  endedAt    DateTime?
+  createdAt  DateTime      @default(now())
+
+  players GameSessionPlayer[]
+
+  @@index([gameId])
+  @@index([status])
+}
+
+model GameSessionPlayer {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  joinedAt  DateTime    @default(now())
+  leftAt    DateTime?
+
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model GameSave {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId  String
+  slot      Int      @default(0)
+  data      Json
+  version   Int      @default(1)
+  updatedAt DateTime @updatedAt
+
+  @@unique([gameId, playerId, slot])
+}
+
+model LeaderboardEntry {
+  id         String   @id @default(cuid())
+  gameId     String
+  game       Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  board      String   @default("default")
+  playerId   String
+  score      Float
+  metadata   Json?
+  achievedAt DateTime @default(now())
+
+  @@index([gameId, board, score])
+}
+
+// =========================================================================
+// Assets
+// =========================================================================
+
+model Asset {
+  id               String        @id @default(cuid())
+  creatorId        String
+  creator          User          @relation("AssetCreator", fields: [creatorId], references: [id])
+  orgId            String?
+  org              Organization? @relation("AssetOrg", fields: [orgId], references: [id])
+  name             String
+  slug             String        @unique
+  type             AssetType     @default(MODEL)
+  status           AssetStatus   @default(UPLOADING)
+  description      String?
+  tags             String[]      @default([])
+  currentVersionId String?
+  thumbnailUrl     String?
+  previewUrl       String?
+  sizeBytes        Int           @default(0)
+  polyCount        Int?
+  qualityScore     Float?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  versions AssetVersion[]
+  passport AssetPassport?
+
+  @@index([creatorId])
+  @@index([type])
+  @@index([status])
+}
+
+model AssetVersion {
+  id        String      @id @default(cuid())
+  assetId   String
+  asset     Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  version   String
+  fileKey   String
+  fileName  String
+  sizeBytes Int
+  mimeType  String
+  pipeline  Json        @default("[]")
+  status    AssetStatus @default(PROCESSING)
+  createdAt DateTime    @default(now())
+
+  variants AssetVariantFile[]
+
+  @@unique([assetId, version])
+  @@index([assetId])
+}
+
+model AssetVariantFile {
+  id           String       @id @default(cuid())
+  versionId    String
+  version      AssetVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  variant      AssetVariant
+  url          String
+  sizeBytes    Int
+  polyCount    Int?
+  textureMaxPx Int?
+  format       String
+  createdAt    DateTime     @default(now())
+
+  @@unique([versionId, variant])
+}
+
+/// One row per Asset holding the full GameWorld Asset Passport document (§6) as JSON.
+model AssetPassport {
+  id        String   @id @default(cuid())
+  assetId   String   @unique
+  asset     Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// =========================================================================
+// NPCs
+// =========================================================================
+
+model NPC {
+  id         String          @id @default(cuid())
+  worldId    String?
+  world      World?          @relation(fields: [worldId], references: [id])
+  ownerId    String
+  owner      User            @relation("NPCOwner", fields: [ownerId], references: [id])
+  name       String
+  definition Json
+  agentId    String?
+  status     LifecycleStatus @default(DRAFT)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  deletedAt  DateTime?
+
+  conversations NPCConversation[]
+
+  @@index([worldId])
+  @@index([ownerId])
+}
+
+model NPCConversation {
+  id        String    @id @default(cuid())
+  npcId     String
+  npc       NPC       @relation(fields: [npcId], references: [id], onDelete: Cascade)
+  playerId  String?
+  player    User?     @relation(fields: [playerId], references: [id])
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  messages NPCMessage[]
+
+  @@index([npcId])
+}
+
+model NPCMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  conversation   NPCConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  text           String
+  emotion        String?
+  actions        Json?
+  createdAt      DateTime        @default(now())
+
+  @@index([conversationId])
+}
+
+// =========================================================================
+// Missions
+// =========================================================================
+
+model Mission {
+  id         String          @id @default(cuid())
+  worldId    String
+  world      World           @relation(fields: [worldId], references: [id], onDelete: Cascade)
+  ownerId    String
+  owner      User            @relation("MissionOwner", fields: [ownerId], references: [id])
+  name       String
+  definition Json
+  status     LifecycleStatus @default(DRAFT)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  deletedAt  DateTime?
+
+  @@index([worldId])
+  @@index([ownerId])
+}
+
+// =========================================================================
+// Economy
+// =========================================================================
+
+model RoyaltyAccrual {
+  id          String         @id @default(cuid())
+  creatorId   String
+  creator     CreatorProfile @relation(fields: [creatorId], references: [id])
+  orderItemId String?
+  orderItem   OrderItem?     @relation(fields: [orderItemId], references: [id])
+  amountCents Int
+  currency    String         @default("USD")
+  status      RoyaltyStatus  @default(ACCRUED)
+  createdAt   DateTime       @default(now())
+  paidAt      DateTime?
+
+  @@index([creatorId])
+  @@index([status])
+}
+
+model Payout {
+  id          String         @id @default(cuid())
+  creatorId   String
+  creator     CreatorProfile @relation(fields: [creatorId], references: [id])
+  amountCents Int
+  currency    String         @default("USD")
+  status      PayoutStatus   @default(REQUESTED)
+  provider    String         @default("STRIPE_CONNECT")
+  providerRef String?
+  requestedAt DateTime       @default(now())
+  sentAt      DateTime?
+
+  @@index([creatorId])
+  @@index([status])
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  userId             String
+  user               User               @relation(fields: [userId], references: [id])
+  orgId              String?
+  org                Organization?      @relation(fields: [orgId], references: [id])
+  tier               PlanTier
+  status             SubscriptionStatus @default(ACTIVE)
+  priceCents         Int
+  currency           String             @default("USD")
+  interval           String             @default("MONTH")
+  currentPeriodStart DateTime           @default(now())
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  provider           PaymentProvider    @default(MOCK)
+  providerRef        String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  payments Payment[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Payment {
+  id             String          @id @default(cuid())
+  orderId        String?
+  order          Order?          @relation(fields: [orderId], references: [id])
+  subscriptionId String?
+  subscription   Subscription?   @relation(fields: [subscriptionId], references: [id])
+  provider       PaymentProvider @default(MOCK)
+  providerRef    String?
+  amountCents    Int
+  currency       String          @default("USD")
+  status         String
+  rawPayload     Json?
+  createdAt      DateTime        @default(now())
+
+  @@index([orderId])
+  @@index([subscriptionId])
+}
+
+// =========================================================================
+// Analytics
+// =========================================================================
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  timestamp DateTime @default(now())
+  sessionId String?
+  userId    String?
+  gameId    String?
+  worldId   String?
+  productId String?
+  props     Json?
+  createdAt DateTime @default(now())
+
+  @@index([name])
+  @@index([gameId])
+  @@index([worldId])
+  @@index([productId])
+  @@index([userId])
+  @@index([timestamp])
+}
+
+/// Full-text + vector search index. embedding is nullable so migrations succeed without
+/// the pgvector extension present (e.g. in CI/test databases).
+model SearchDocument {
+  id        String                      @id @default(cuid())
+  kind      String
+  refId     String
+  text      String
+  embedding Unsupported("vector(768)")?
+  updatedAt DateTime                    @updatedAt
+
+  @@unique([kind, refId])
+  @@index([kind])
+}
+
+model AIExecution {
+  id         String       @id @default(cuid())
+  worldId    String?
+  world      World?       @relation(fields: [worldId], references: [id])
+  actorId    String?
+  actor      User?        @relation(fields: [actorId], references: [id])
+  tool       AIToolName
+  args       Json
+  role       AIAgentRole?
+  ok         Boolean
+  result     Json?
+  error      String?
+  durationMs Int          @default(0)
+  events     String[]     @default([])
+  createdAt  DateTime     @default(now())
+
+  @@index([worldId])
+  @@index([actorId])
+  @@index([tool])
+}
+
+model AIUsage {
+  id           String        @id @default(cuid())
+  userId       String?
+  user         User?         @relation(fields: [userId], references: [id])
+  orgId        String?
+  org          Organization? @relation(fields: [orgId], references: [id])
+  model        String
+  inputTokens  Int           @default(0)
+  outputTokens Int           @default(0)
+  costCents    Int           @default(0)
+  periodStart  DateTime      @default(now())
+  periodEnd    DateTime?
+  createdAt    DateTime      @default(now())
+
+  @@index([userId])
+  @@index([orgId])
+}
+
+// =========================================================================
+// Infrastructure
+// =========================================================================
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String?
+  link      String?
+  read      Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+}
+
+model ModerationItem {
+  id                  String             @id @default(cuid())
+  refKind             ModerationRefKind
+  refId               String
+  stage               String
+  status              ModerationStatus   @default(PENDING)
+  severity            ModerationSeverity @default(LOW)
+  reason              String
+  reporterId          String?
+  assigneeId          String?
+  aiVerdictLabel      String?
+  aiVerdictConfidence Float?
+  aiVerdictNotes      String?
+  resolutionAction    String?
+  resolutionNotes     String?
+  createdAt           DateTime           @default(now())
+  resolvedAt          DateTime?
+
+  @@index([status])
+  @@index([severity])
+  @@index([refKind, refId])
+}
+
+model Webhook {
+  id             String    @id @default(cuid())
+  ownerId        String
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  url            String
+  events         String[]  @default([])
+  secret         String?
+  active         Boolean   @default(true)
+  description    String?
+  lastDeliveryAt DateTime?
+  failureCount   Int       @default(0)
+  createdAt      DateTime  @default(now())
+  deletedAt      DateTime?
+
+  @@index([ownerId])
+}
+
+model Integration {
+  id          String              @id @default(cuid())
+  ownerId     String?
+  orgId       String?
+  provider    IntegrationProvider
+  name        String
+  status      IntegrationStatus   @default(AVAILABLE)
+  version     String?
+  docsUrl     String?
+  config      Json?
+  connectedAt DateTime?
+  createdAt   DateTime            @default(now())
+  deletedAt   DateTime?
+
+  @@index([ownerId])
+  @@index([provider])
+}
+
+model GameServer {
+  id         String           @id @default(cuid())
+  gameId     String?
+  game       Game?            @relation(fields: [gameId], references: [id])
+  region     String
+  status     GameServerStatus @default(STARTING)
+  address    String
+  port       Int
+  players    Int              @default(0)
+  maxPlayers Int              @default(0)
+  version    String?
+  startedAt  DateTime         @default(now())
+
+  @@index([gameId])
+  @@index([region])
+  @@index([status])
+}
+
+model LiveEvent {
+  id           String          @id @default(cuid())
+  gameId       String?
+  game         Game?           @relation(fields: [gameId], references: [id])
+  worldId      String?
+  world        World?          @relation(fields: [worldId], references: [id])
+  name         String
+  description  String?
+  type         LiveEventType
+  startsAt     DateTime
+  endsAt       DateTime
+  status       LiveEventStatus @default(SCHEDULED)
+  config       Json?
+  participants Int             @default(0)
+  createdAt    DateTime        @default(now())
+  deletedAt    DateTime?
+
+  @@index([gameId])
+  @@index([worldId])
+  @@index([status])
+}
+
+model MatchmakeTicket {
+  id        String          @id @default(cuid())
+  gameId    String
+  game      Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  mode      String?
+  region    String?
+  party     String[]        @default([])
+  skill     Float?
+  status    MatchmakeStatus @default(SEARCHING)
+  sessionId String?
+  createdAt DateTime        @default(now())
+  matchedAt DateTime?
+
+  @@index([gameId])
+  @@index([userId])
+  @@index([status])
+}
+
+// =========================================================================
+// Analytics rollups (written by workers/analytics; read by services/api's
+// analytics endpoints). See workers/analytics/README.md for the aggregation
+// logic that populates these.
+// =========================================================================
+
+model PlayerMetric {
+  id              String   @id @default(cuid())
+  userId          String
+  periodStart     DateTime
+  periodEnd       DateTime
+  sessionsJoined  Int      @default(0)
+  gamesPlayed     Int      @default(0)
+  playtimeMinutes Float    @default(0)
+  eventsCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@unique([userId, periodStart])
+  @@index([periodStart])
+}
+
+model GameMetric {
+  id                String   @id @default(cuid())
+  gameId            String
+  periodStart       DateTime
+  periodEnd         DateTime
+  sessionsStarted   Int      @default(0)
+  sessionsEnded     Int      @default(0)
+  uniquePlayers     Int      @default(0)
+  playtimeMinutes   Float    @default(0)
+  avgSessionMinutes Float    @default(0)
+  createdAt         DateTime @default(now())
+
+  @@unique([gameId, periodStart])
+  @@index([periodStart])
+}
+
+model AssetMetric {
+  id            String   @id @default(cuid())
+  assetId       String
+  periodStart   DateTime
+  periodEnd     DateTime
+  views         Int      @default(0)
+  purchases     Int      @default(0)
+  revenueCents  Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([assetId, periodStart])
+  @@index([periodStart])
+}
+
+model CreatorMetric {
+  id                String   @id @default(cuid())
+  creatorId         String
+  periodStart       DateTime
+  periodEnd         DateTime
+  salesCount        Int      @default(0)
+  grossRevenueCents Int      @default(0)
+  royaltyCents      Int      @default(0)
+  reviewsReceived   Int      @default(0)
+  avgRating         Float    @default(0)
+  repScoreSnapshot  Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  @@unique([creatorId, periodStart])
+  @@index([periodStart])
+}
+
+model MarketplaceMetric {
+  id                String   @id @default(cuid())
+  periodStart       DateTime @unique
+  periodEnd         DateTime
+  ordersCount       Int      @default(0)
+  grossRevenueCents Int      @default(0)
+  platformFeeCents  Int      @default(0)
+  refundsCents      Int      @default(0)
+  newProducts       Int      @default(0)
+  newUsers          Int      @default(0)
+  activeSessions    Int      @default(0)
+  createdAt         DateTime @default(now())
+}

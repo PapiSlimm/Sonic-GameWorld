@@ -1,0 +1,41 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "1.0.0",
+  "FriendlyName": "Sonic GameWorld",
+  "Description": "Official Unreal Engine plugin for Sonic GameWorld OS — authenticate, browse and import from the GameWorld Marketplace, load GameWorld Asset Format worlds as actors, drive worlds with GameWorld AI, and use GameWorld Cloud (sessions, saves, leaderboards) as backend-as-a-service.",
+  "Category": "Sonic GameWorld",
+  "CreatedBy": "Sonic GameWorld",
+  "CreatedByURL": "https://sonicgameworld.com",
+  "DocsURL": "https://developer.sonicgameworld.com/docs/unreal",
+  "MarketplaceURL": "",
+  "SupportURL": "https://developer.sonicgameworld.com/support",
+  "CanContainContent": true,
+  "IsBetaVersion": false,
+  "IsExperimentalVersion": false,
+  "Installed": false,
+  "Modules": [
+    {
+      "Name": "SonicGameWorld",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "WhitelistPlatforms": [
+        "Win64",
+        "Mac",
+        "Linux",
+        "Android",
+        "IOS"
+      ]
+    },
+    {
+      "Name": "SonicGameWorldEditor",
+      "Type": "Editor",
+      "LoadingPhase": "Default",
+      "WhitelistPlatforms": [
+        "Win64",
+        "Mac",
+        "Linux"
+      ]
+    }
+  ]
+}

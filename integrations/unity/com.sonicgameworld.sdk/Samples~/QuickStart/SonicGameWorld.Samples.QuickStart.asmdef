@@ -1,0 +1,10 @@
+{
+  "name": "SonicGameWorld.Samples.QuickStart",
+  "rootNamespace": "SonicGameWorld.Samples",
+  "references": [
+    "SonicGameWorld.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "autoReferenced": false
+}

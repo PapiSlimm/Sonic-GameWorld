@@ -1,0 +1,14 @@
+{
+  "name": "gameworld-sync-custom-claims",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Standalone script: mirrors GameWorld User.roles/User.tier onto Firebase custom claims. Not part of the pnpm workspace (see ../../README.md) — install its own deps with npm/pnpm from this directory.",
+  "type": "module",
+  "scripts": {
+    "sync": "node sync-custom-claims.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "pg": "^8.13.1"
+  }
+}

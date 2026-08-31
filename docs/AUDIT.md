@@ -435,3 +435,105 @@ called out explicitly in §9 rather than shipped as a half-working navmesh dress
 assign factions, but cover-cell painting (which tiles grant stealth-detection-halving) and biome
 selection are not yet first-class Studio authoring tools — `rts-sim`'s `RTSMap.coverCells` defaults
 to all-zero until Studio grows a way to paint it.
+
+## Polish pass: closing §9 gaps (added after the RTS integration above)
+
+A follow-up pass closed three of the gaps the RTS integration section above called out as
+unfinished. Forced/no-cache, run twice: **35/35 typecheck, 24/24 build, 35/35 test tasks green both
+times.** `apps/player`: 101 tests (was 85). `services/api`: 163 tests (was 162). `packages/spatial-engine`:
+95 tests (was 68). `apps/studio`: 22 tests (was 9). `packages/rts-sim` was treated as a stable,
+already-verified dependency and deliberately not modified by this pass.
+
+- **HUD now surfaces heat/stealth/difficulty/allied-strike**, previously simulated correctly but
+  invisible to the player: a heat gauge under a selected unit's health bar, a "Detected" badge on
+  enemy units exposed by heat, a Beginner/Intermediate/Pro difficulty picker on the lobby screen
+  (wired through a new `PATCH /sessions/:id/rts/difficulty` route, since the session is created
+  before any lobby UI renders), and a clear warning banner when an allied-strike condition fires.
+  Real gap found and fixed along the way: the difficulty selector's value was being computed but
+  silently dropped before reaching `FactionSetup.difficulty` — now actually threaded through.
+- **RTS units and buildings are now visually distinguishable by type**, not one shared capsule/box
+  for everything: infantry/armored/air/naval each get a distinct cheap-primitive silhouette (still
+  one draw call per family — no full per-archetype modeling, this stays a strategy-game-scale
+  renderer), and buildings distinguish a production silhouette from a taller radar/tech one.
+  Team color still tints whichever geometry a unit uses.
+- **Studio can now author RTS map biome and cover cells** — a biome selector (Urban/Jungle/Sea) and
+  a click-drag paint tool for stealth-cover tiles, persisted in the world document's `systems` list
+  under a `rts-map-config` entry in the exact grid shape `rts-sim`'s `RTSMap.coverCells` expects, so
+  a later match-bootstrap step can consume it directly without reshaping.
+
+**Still open after this pass** (real scope, not yet attempted): allied factions have no lobby UI to
+actually add extra AI-controlled allies, so the allied-strike banner's logic is correct and tested
+but currently unreachable in a live match; heat/stealth detection is HUD-only, not real fog-of-war
+unit-hiding (every peer still receives full match state locally, per the multiplayer section
+above); there is still no match-bootstrap step converting a Studio-authored map into a running
+`RTSMatchState`, no anti-cheat, and no full naval pathfinding — all called out as deliberate,
+larger scope cuts, not oversights.
+
+## Local-run bug fix: broken `syntax=` parser directive in all 3 Dockerfiles
+
+While walking through the local Docker setup, `docker compose --profile full up -d` failed on the
+`workers` build with `dockerfile parse error on line 8: unknown instruction: syntax=docker/dockerfile:1`.
+Root cause: `infrastructure/docker/workers.Dockerfile`, `api.Dockerfile`, and `web.Dockerfile` all had
+a `syntax=docker/dockerfile:1` line with no `#` prefix at all (not a valid comment, so Docker's
+parser tried to read it as a real instruction and failed), and it also wasn't the first line of the
+file (it sat after several real `#`-comment lines) — the syntax directive must be both a genuine
+comment and the literal first line to be recognized. Fixed all three files: `# syntax=docker/dockerfile:1`
+is now line 1 in each. Not verified with a live `docker build` (no Docker daemon in this sandbox),
+but confirmed by direct inspection that line 1 now matches Docker's documented requirement exactly.
+
+Also worth noting for local dev: `--profile full` builds the custom `api`/`workers` images, which
+isn't needed to just run the app via `pnpm dev` — plain `docker compose up -d` (no profile) starts
+only the four backing services (Postgres, Redis, OpenSearch, MinIO) that local dev actually needs.
+
+## Local-run bug fix: no `.env` loading path for `pnpm dev` / `prisma migrate dev`
+
+While walking through local Docker + `pnpm dev` setup, `pnpm db:migrate` failed with
+`Error: Environment variable not found: DATABASE_URL` even with a correctly filled-in root `.env`.
+Root cause: nothing in this codebase ever loads the root `.env` file into `process.env` for a plain
+`pnpm`/`tsx`/`prisma` invocation on the host machine — the README's `cp .env.example .env` step
+implies this "just works," but it silently only worked for the two paths that inject env vars
+themselves: Docker Compose's `env_file: .env` on the `api`/`workers` services, and Render setting
+real container env vars directly. Running `prisma migrate dev` (or `pnpm dev`) straight on the host,
+as the local-dev walkthrough instructs, had no env-loading mechanism at all.
+
+Fixed by adding `dotenv-cli` as a root devDependency and wrapping the four host-invoked root
+scripts — `dev`, `db:generate`, `db:migrate`, `db:seed` — with `dotenv -e .env --`. Deliberately did
+NOT touch `services/api/package.json`'s own `prisma:*` scripts or `render.yaml`'s
+`preDeployCommand` (`services/api/node_modules/.bin/prisma migrate deploy ...`), since those run
+where env vars are already injected by the platform and wrapping them would break if `.env` doesn't
+exist there. Verified `dotenv -e .env -- node -e "console.log(process.env.DATABASE_URL)"` correctly
+prints the value from `.env.example`'s copy, and confirmed the dependency bump doesn't disturb
+anything else: `pnpm turbo run typecheck --force` still 35/35 green.
+
+## Pricing update: repriced STUDIO/ENTERPRISE for the new RTS + desktop capabilities
+
+Requested directly: "upgrade our top price tier packages to fit our newer structure and services."
+The two top tiers (STUDIO, ENTERPRISE) were still priced at their original spec numbers even
+though the product has since gained two substantial capabilities: the full "Global Dominance"
+RTS/real-time-strategy creation toolset, and a downloadable offline desktop app. Changes, all in
+`packages/world-schema/src/enums.ts`'s `PLAN` constant (the single source of truth — no Stripe
+Price object IDs exist anywhere in this codebase; `services/api/src/modules/subscriptions/index.ts`
+computes `priceCents` from this table dynamically, so nothing else needed to change to take effect):
+
+- **STUDIO**: $149/mo -> $199/mo, team seats 10 -> 15.
+- **ENTERPRISE**: $999/mo -> $1,499/mo (fee% and unlimited limits unchanged — already the max).
+- **STARTER/CREATOR/PRO**: left exactly as spec'd — no repricing trigger for those tiers.
+- Added a new `features: string[]` field to `PlanDefinition` (every tier, not just the top two, so
+  the type stays consistent) — short marketing-facing highlight strings surfaced on
+  `apps/creator/components/PlanTierTable.tsx`'s pricing table. This field is descriptive only and
+  is never read by any entitlement check (those all stay purely numeric: `projects`/`assets`/
+  `teamMembers`/`feePct`) — every tier can already use the RTS tools and the desktop app today,
+  the repricing reflects that value, it doesn't gate it.
+- `docs/CONTRACTS.md` §4 updated to match (previously "exact numbers from spec" — now documents
+  the repricing and points at `PLAN.<tier>.features` for the actual marketing copy).
+
+**Deliberately not done, and worth a real decision later**: whether to actually gate RTS-tools/
+desktop-app access behind STUDIO+ (the features list currently oversells what STARTER/CREATOR/PRO
+users can't already do — they CAN already use both, today, for free/low tiers), whether existing
+STUDIO/ENTERPRISE subscribers should be grandfathered at their old price or migrated to the new
+one, and updating any external marketing site/pricing page outside this repo. None of those were
+specified, so none were touched.
+
+Verified: `pnpm turbo run typecheck --force` 36/36, `build --force` 12/12 (touched packages),
+`test --force` 36/36 (api's 165 tests unaffected — the one PLAN-asserting test only checks
+STARTER/CREATOR/PRO numbers, which are unchanged).

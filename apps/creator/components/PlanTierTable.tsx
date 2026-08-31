@@ -36,14 +36,23 @@ export function PlanTierTable({ currentTier, onUpgrade, upgrading }: PlanTierTab
             const isCurrent = tier === currentTier;
             const idx = PLAN_TIERS.indexOf(tier);
             const isDowngrade = idx < currentIdx;
+            const isTopTier = tier === 'STUDIO' || tier === 'ENTERPRISE';
             return (
-              <tr key={tier} className={cn('border-b border-border/60 last:border-b-0', isCurrent && 'bg-accent/5')}>
+              <tr key={tier} className={cn('border-b border-border/60 last:border-b-0 align-top', isCurrent && 'bg-accent/5')}>
                 <td className="px-3 py-3">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-text">{tier}</span>
                     {isCurrent && <Badge tone="accent">Current</Badge>}
                     {tier === 'ENTERPRISE' && <Badge tone="violet">Negotiated</Badge>}
+                    {tier === 'STUDIO' && <Badge tone="accent">Most popular</Badge>}
                   </div>
+                  <ul className="mt-2 space-y-1">
+                    {def.features.map((feature) => (
+                      <li key={feature} className={cn('text-xs leading-snug text-muted', isTopTier && 'text-text/70')}>
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
                 </td>
                 <td className="px-3 py-3 font-hud tabular-nums text-text/90">
                   {def.priceUsd === 0 ? 'Free' : `$${def.priceUsd}/mo`}

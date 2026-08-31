@@ -1,9 +1,15 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { Crosshair, MoveRight } from 'lucide-react';
+import { Crosshair, Flame, MoveRight } from 'lucide-react';
+import { HEAT_DETECTION_THRESHOLD } from '@sonic-gameworld/rts-sim';
 import type { RtsViewportRuntime } from '../../lib/rts/viewportRuntime';
 import { factionColor } from './rtsTheme';
+
+/** Heat gauge scale ceiling — `RTSUnit.heat` is clamped to at most 1.2 by `combatSystem` (see
+ * rts-sim's constants.ts doc on `HEAT_DETECTION_THRESHOLD`), so the gauge always has headroom
+ * above the detection threshold rather than pinning at 100% right when a unit becomes exposed. */
+const HEAT_GAUGE_MAX = 1.2;
 
 /** How long a move/attack-move feedback marker stays visible before fading out — exported so
  * `RtsViewport` can prune the runtime's feedback-marker list at the same cadence this overlay
@@ -27,9 +33,16 @@ export function RtsUnitOverlay({ runtime }: RtsUnitOverlayProps) {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {snapshot.unitMarkers.map((marker) => {
-        if (!marker.screen || (!marker.isSelected && marker.health >= marker.maxHealth)) return null;
+        // A marker still needs to render when it has nothing else going on but IS thermally
+        // detected — that's the whole point of the "not a silent ambush" stealth-break signal
+        // (docs/RTS-CONTRACTS.md §9): an undamaged, unselected enemy unit must still show as
+        // detected the moment it overheats into visibility.
+        if (!marker.screen || (!marker.isSelected && marker.health >= marker.maxHealth && !marker.isThermallyDetected)) return null;
+        const showHealthBar = marker.isSelected || marker.health < marker.maxHealth;
         const pct = marker.maxHealth > 0 ? Math.max(0, Math.min(100, (marker.health / marker.maxHealth) * 100)) : 0;
         const barColor = pct > 50 ? '#38F5C8' : pct > 20 ? '#F4C542' : '#EF4444';
+        const heatPct = Math.max(0, Math.min(100, (marker.heat / HEAT_GAUGE_MAX) * 100));
+        const heatColor = marker.heat >= HEAT_DETECTION_THRESHOLD ? '#EF4444' : marker.heat >= HEAT_DETECTION_THRESHOLD * 0.6 ? '#F4C542' : '#38F5C8';
         return (
           <div
             key={marker.id}
@@ -43,9 +56,24 @@ export function RtsUnitOverlay({ runtime }: RtsUnitOverlayProps) {
                 aria-hidden
               />
             )}
-            <div className="h-1 w-8 overflow-hidden rounded-full bg-black/60">
-              <div className="h-full transition-[width]" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-            </div>
+            {showHealthBar && (
+              <div className="h-1 w-8 overflow-hidden rounded-full bg-black/60">
+                <div className="h-full transition-[width]" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+              </div>
+            )}
+            {/* Heat gauge (docs/RTS-CONTRACTS.md §9): only shown for a selected unit — only the
+             * viewer's own units can ever be selected, so this reads as "how close is MY unit to
+             * giving itself away", not enemy intel the viewer shouldn't have. */}
+            {marker.isSelected && (
+              <div className="h-1 w-8 overflow-hidden rounded-full bg-black/60">
+                <div className="h-full transition-[width]" style={{ width: `${heatPct}%`, backgroundColor: heatColor }} />
+              </div>
+            )}
+            {marker.isThermallyDetected && (
+              <span className="flex items-center gap-0.5 rounded-full bg-black/70 px-1 py-0.5 text-[9px] font-hud uppercase tracking-wider text-orange-400">
+                <Flame className="h-2.5 w-2.5" aria-hidden /> Detected
+              </span>
+            )}
           </div>
         );
       })}

@@ -147,6 +147,8 @@ const CreateRtsSessionSchema = z.object({
 
 const RtsJoinSchema = z.object({ factionId: z.string().optional() });
 
+const UpdateRtsDifficultySchema = z.object({ difficulty: RtsDifficultySchema });
+
 const SaveBodySchema = z.object({ slot: z.number().int().nonnegative().default(0), data: z.record(z.unknown()) });
 
 const LeaderboardSubmitSchema = z.object({
@@ -581,6 +583,28 @@ export async function registerGamesModule(app: FastifyInstance): Promise<void> {
     const rts = await rtsStore.get(id);
     if (!rts) throw AppError.notFound('RTS session', id);
     return serializeRtsRecord(rts);
+  });
+
+  // Host-only, lobby-only difficulty change (docs/RTS-CONTRACTS.md §9's difficulty picker): a
+  // dedicated PATCH rather than folding this into `CreateRtsSessionSchema` alone, since
+  // `RtsPlayClient.tsx` creates the session immediately on mount (before a host has any UI to pick
+  // from) — the lobby screen is where the actual picker lives, so it needs a way to update the
+  // already-created session's difficulty before `RTS_MATCH_START` fires.
+  app.patch('/sessions/:id/rts/difficulty', { preHandler: [app.authenticate] }, async (request) => {
+    const { id } = request.params as { id: string };
+    const { session } = await loadSessionOrThrow(id);
+    if (session.mode !== 'RTS') throw AppError.badRequest('This session was not created as an RTS match');
+    if (session.hostId !== request.user!.userId) throw AppError.forbidden('Only the host can change match difficulty');
+    if (session.status !== 'LOBBY') throw AppError.conflict('Difficulty can only be changed before the match starts');
+    const rts = await rtsStore.get(id);
+    if (!rts) throw AppError.notFound('RTS session', id);
+    const body = UpdateRtsDifficultySchema.parse(request.body ?? {});
+
+    rts.difficulty = body.difficulty;
+    rts.updatedAt = new Date().toISOString();
+    await rtsStore.set(id, rts);
+
+    return { session: await serializeSession(session), rts: serializeRtsRecord(rts) };
   });
 
   app.post('/sessions/:id/join', { preHandler: [app.authenticate] }, async (request) => {

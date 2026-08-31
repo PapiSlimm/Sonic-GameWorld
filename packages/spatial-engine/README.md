@@ -36,10 +36,13 @@ pnpm --filter @sonic-gameworld/spatial-engine test        # vitest (jsdom)
 
 No environment variables. `three`, `react`, and `react-dom` are peer/external — the consuming app
 supplies its own versions (tsup marks them `external`, so they're never bundled here).
-`@sonic-gameworld/rts-sim` is a **type-only** workspace dependency (every import of it in this
-package is `import type { ... }`) — its actual runtime code is never pulled into this package's
-bundle, keeping the "zero rendering/networking deps" boundary intact on rts-sim's side (docs/RTS-CONTRACTS.md
-§1) without this package having to hand-duplicate its types.
+`@sonic-gameworld/rts-sim` was a **type-only** workspace dependency until `src/rts/syncEntities.ts`
+started calling its `getTeamColor`/`isNavalUnit` helpers at runtime (for the geometry-bucket +
+team-color tinting described below); tsup now marks it `external` too, exactly like `three`, so its
+compiled JS is resolved from the workspace at runtime rather than duplicated into this package's
+`dist/index.js` — the "zero rendering/networking deps" boundary on rts-sim's own side
+(docs/RTS-CONTRACTS.md §1) is unaffected either way, since that constraint is about what `rts-sim`
+imports, not who imports `rts-sim`.
 
 ## Core usage
 
@@ -154,22 +157,58 @@ pre-existing 9 camera modes and entity-rendering pipeline:
   around the pre-existing, already-working `setCameraMode`/`track` runtime — it does not
   reimplement `FIRST_PERSON`/`THIRD_PERSON`.
 - **`RTS_UNIT` / `RTS_BUILDING` entity kinds** — rendered as instanced primitives like every other
-  kind: a capsule for units (`ENTITY_KIND_RADIUS.RTS_UNIT`), a box for buildings
-  (`ENTITY_KIND_RADIUS.RTS_BUILDING`), each on its own layer (`RTS_UNITS`/`RTS_BUILDINGS` in
-  `@sonic-gameworld/world-schema`'s `LayerKind`) so a creator can toggle their visibility
-  independently of the generic VEHICLES/BUILDINGS layers. One shared geometry per kind (dozens of
-  units on screen stay cheap) — per-`unitClass`/`sizeCells` size variety comes from `transform.scale`
-  on each instance (see `syncRTSEntities` below), not a separate mesh per archetype. **Known gap**:
-  this does not yet distinguish `unitType` (the §9 depth-extension roster — Rifleman vs. Sniper vs.
-  Main Battle Tank, etc.) visually at all; a later integration pass wanting per-archetype geometry
-  will need a bigger change than a scale tweak (e.g. sub-bucketing `RTS_UNIT` by `unitType`).
+  kind, but *sub-bucketed* within each kind so the §9 depth-extension's expanded `unitType` roster
+  (Rifleman vs. Main Battle Tank vs. Destroyer, etc.) reads as visually distinct at RTS zoom without
+  a per-archetype mesh:
+  - **`RTS_UNIT`** buckets into `INFANTRY` (thin capsule — "a squad" silhouette by proportion, not
+    a literal multi-capsule cluster), `ARMORED` (low wide box — tank/APC hull), `AIR` (a Y-flattened
+    octahedron — small wing/diamond silhouette, rendered at flight altitude via `unitToTransform`),
+    and `NAVAL` (an elongated flat hull box). A unit's bucket is chosen from `unit.unitClass` — with
+    one override: `isNavalUnit(unit)` (keyed off the optional §9 `unitType` field) reroutes an
+    archetype like `DESTROYER`/`FRIGATE` to `NAVAL` even though `rts-sim` models it as `unitClass:
+    'ARMORED'` (ships trade fire like a ground vehicle in that package's combat model, but shouldn't
+    render like a tank). A unit with no `unitType` at all — every unit from match state saved before
+    §9 — always falls straight through to the plain per-`unitClass` bucket, since `isNavalUnit` on
+    such a unit is unconditionally `false`; this is the "fall back sensibly when `unitType` is
+    absent" behavior `syncRTSEntities` is required to preserve.
+  - **`RTS_BUILDING`** buckets into `PRODUCTION` (the original boxy silhouette — every
+    `REFINERY`/`BARRACKS`/`FACTORY`/`AIRFIELD`) and `TECH` (a taller box, same footprint, for
+    `RADAR` — the §9 "Radar Array" — so it reads as a tech building rather than a factory).
+  - **Mechanism**: this is *not* a new `EntityKind`/zod-schema value (no migration needed) — it's a
+    small extension to `EntityRegistry`'s existing per-kind `InstancedMesh` bucketing
+    (`engine/entities.ts`). An entity opts into a sub-bucket via a `WorldEntity.metadata` hint
+    (`GEOMETRY_BUCKET_METADATA_KEY`); `bucketFor`/`geometryForKind` key the bucket map by
+    `(kind, variant)` instead of `kind` alone when a recognized variant is present, so e.g. a
+    `DESTROYER` and a `MAIN_BATTLE_TANK` (both `unitClass: 'ARMORED'`) still land in *different*
+    `InstancedMesh`es, while two `DESTROYER`s (or a `FRIGATE`) share *one* — draw calls scale with
+    the number of distinct families on screen (a handful), never with instance count or with the
+    full `unitType` roster's cardinality. An absent or unrecognized `geometryBucket` value (e.g. an
+    RTS_UNIT spawned by some caller other than `syncRTSEntities`, like a bare Studio-palette
+    placeholder with no match state yet) falls back to that kind's original single default bucket,
+    unchanged from before this feature.
+  - **Team color**: `WorldEntity.metadata`'s `TEAM_COLOR_METADATA_KEY` (a `#rrggbb` hex string) sets
+    a per-*instance* tint on top of whichever bucket an entity uses, overriding the bucket's shared
+    `ENTITY_KIND_COLORS` base tint. `syncRTSEntities` sets it from `getTeamColor(factionId, biome)`
+    (`@sonic-gameworld/rts-sim`'s §9 biome-team-color helper) at spawn time, so Raven Alliance always
+    renders Blue and United Dragon Nations renders Red (Urban/Sea) or Green (Jungle) regardless of
+    which geometry bucket a unit/building is in. The tint survives `EntityRegistry.setSelected`'s
+    select/deselect highlight — deselecting restores the entity's own tint, not the bucket's shared
+    base color.
+  - Each on its own layer (`RTS_UNITS`/`RTS_BUILDINGS` in `@sonic-gameworld/world-schema`'s
+    `LayerKind`) so a creator can toggle their visibility independently of the generic
+    VEHICLES/BUILDINGS layers, same as before. Per-`unitClass`/`sizeCells` size variety still comes
+    from `transform.scale` on each instance (see `syncRTSEntities` below), layered on top of the new
+    per-bucket shape variety, not replacing it.
 - **`syncRTSEntities(state, registry, opts?)`** (`src/rts/syncEntities.ts`) — the frame-by-frame
   adapter from an `@sonic-gameworld/rts-sim` `RTSMatchState` onto an `EntityRegistry`. Stateless: it
   diffs `state.entities.{units,buildings}` against whichever synced ids (recognized by the
   `rts-unit:`/`rts-building:` `WorldEntity.id` prefixes) currently exist in `registry`, and
   spawns/moves/removes accordingly via `EntityRegistry`'s existing methods — never bypasses them,
   and never touches an author-placed `WorldEntity`. Position/rotation only, per §6 ("health/
-  isSelected/factionId etc. render as HUD overlays/tinting, not `WorldEntity` fields"). Also
+  isSelected/factionId etc. render as HUD overlays/tinting, not `WorldEntity` fields") — plus, only
+  at spawn time (never touched again by `move()`), the geometry-bucket and team-color metadata hints
+  described above; those are two small rendering strings, not match state, so this doesn't reopen
+  §6's "don't serialize full match state onto `WorldEntity`" concern. Also
   exported: `rtsUnitEntityId`/`rtsBuildingEntityId`/`parseRTSEntityId` (id prefix helpers — e.g. to
   recover the raw `RTSUnit`/`RTSBuilding` id from a `SpatialEngine.raycast()` hit for click-to-select)
   and `quaternionFromRotationY`. `SpatialEngine.syncRTSEntities(state, opts?)` is a thin method

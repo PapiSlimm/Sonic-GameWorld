@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, LogIn, WifiOff } from 'lucide-react';
 import { Button, EmptyState } from '@sonic-gameworld/ui';
-import type { Game, RealtimeHandle, RealtimeMessage, RtsMatchStartPayload } from '@sonic-gameworld/gameworld-sdk';
+import type { Game, RealtimeHandle, RealtimeMessage, RtsDifficulty, RtsMatchStartPayload } from '@sonic-gameworld/gameworld-sdk';
 import type { RTSCommand, RTSMatchState, UnitClass } from '@sonic-gameworld/rts-sim';
 import { getGameWorldClient } from '../../../../lib/sdk';
 import { usePlayerStore } from '../../../../lib/store/playerStore';
@@ -59,6 +59,7 @@ export function RtsPlayClient({ gameId }: { gameId: string }) {
   const selectedUnitIds = useRtsStore((s) => s.selectedUnitIds);
   const possessedUnitId = useRtsStore((s) => s.possessedUnitId);
   const desynced = useRtsStore((s) => s.desynced);
+  const alliedStrikeFactionId = useRtsStore((s) => s.alliedStrikeFactionId);
   const possess = useRtsStore((s) => s.possess);
   const issueCommand = useRtsStore((s) => s.issueCommand);
 
@@ -175,6 +176,21 @@ export function RtsPlayClient({ gameId }: { gameId: string }) {
     }
   }
 
+  async function handleSetDifficulty(difficulty: RtsDifficulty) {
+    if (!session) return;
+    setLobbyBusy(true);
+    setLobbyError(undefined);
+    try {
+      const client = getGameWorldClient();
+      const result = await client.sessions.rtsSetDifficulty(session.id, { difficulty });
+      useRtsStore.getState().updateLobby(result.session, result.rts);
+    } catch (err) {
+      setLobbyError(err instanceof Error ? err.message : 'Could not update difficulty.');
+    } finally {
+      setLobbyBusy(false);
+    }
+  }
+
   async function handleReady() {
     if (!session) return;
     setLobbyBusy(true);
@@ -244,6 +260,7 @@ export function RtsPlayClient({ gameId }: { gameId: string }) {
         shareUrl={shareUrl}
         onJoinFaction={handleJoinFaction}
         onReady={handleReady}
+        onSetDifficulty={handleSetDifficulty}
       />
     );
   }
@@ -271,6 +288,7 @@ export function RtsPlayClient({ gameId }: { gameId: string }) {
             selectedUnitIds={selectedUnitIds}
             possessedUnitId={possessedUnitId}
             desynced={desynced}
+            alliedStrikeFactionId={alliedStrikeFactionId}
             onPossess={(unitId) => possess(unitId)}
             onReleasePossession={() => possess(null)}
           />

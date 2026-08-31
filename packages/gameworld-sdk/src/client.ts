@@ -17,7 +17,7 @@ import type {
   Organization, OrgMember, Page, PageQuery, Payout, Product, ProductLicense, ProductPatch, ProductVersion,
   PublishAssetInput, PublishResult, PublishWorldInput, PutGameSaveInput, Readiness, Recommendation,
   RecommendationQuery, RefundInput, RequestPayoutInput, ReportInput, Review, RtsJoinInput, RtsReadyResult,
-  RtsSessionInfo, RtsSessionResult, SearchHit, SearchQuery,
+  RtsSessionInfo, RtsSessionResult, SearchHit, SearchQuery, UpdateRtsDifficultyInput,
   SearchResult, ServerQuery, Subscription,
   SubmitScoreInput, UploadUrlInput, UploadUrlResult, User, UserPatch, Webhook, WishlistItem, World,
   WorldDocument, WorldListQuery, WorldPatch, WorldSnapshot,
@@ -133,6 +133,9 @@ export class GameWorldClient {
     /** Confirms this player is ready; `RTS_MATCH_START` fires once every human faction is. */
     rtsReady: (id: string) => this.http.post<RtsReadyResult>(`/v1/sessions/${id}/rts/ready`),
     getRts: (id: string) => this.http.get<RtsSessionInfo>(`/v1/sessions/${id}/rts`),
+    /** Host-only, lobby-only: sets the difficulty applied to any AI-controlled faction once the
+     * match starts (docs/RTS-CONTRACTS.md §9). */
+    rtsSetDifficulty: (id: string, input: UpdateRtsDifficultyInput) => this.http.patch<RtsSessionResult>(`/v1/sessions/${id}/rts/difficulty`, input),
   };
 
   readonly assets = {

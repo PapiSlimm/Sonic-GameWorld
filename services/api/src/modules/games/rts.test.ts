@@ -143,4 +143,50 @@ describe('RTS sessions: lobby, faction assignment, ready-gated match start', () 
     expect(rejoin.statusCode).toBe(200);
     expect(rejoin.json().rts.factionAssignments[secondFactionId]).toBe(guest.userId);
   });
+
+  it('lets the host change difficulty before the match starts, rejects it from a non-host, and rejects it once running', async () => {
+    ctx = await buildTestApp();
+    const host = await devLogin(ctx.app, 'rts-difficulty-host@example.com');
+    const hostAuth = { authorization: `Bearer ${host.accessToken}` };
+    const guest = await devLogin(ctx.app, 'rts-difficulty-guest@example.com');
+    const guestAuth = { authorization: `Bearer ${guest.accessToken}` };
+    const game = await createGame(ctx, hostAuth);
+
+    const created = (
+      await ctx.app.inject({ method: 'POST', url: `/v1/games/${game.id}/rts/sessions`, headers: hostAuth, payload: { difficulty: 'Intermediate' } })
+    ).json();
+    const sessionId = created.session.id;
+    expect(created.rts.difficulty).toBe('Intermediate');
+
+    const notHost = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/v1/sessions/${sessionId}/rts/difficulty`,
+      headers: guestAuth,
+      payload: { difficulty: 'Pro' },
+    });
+    expect(notHost.statusCode).toBe(403);
+
+    const asHost = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/v1/sessions/${sessionId}/rts/difficulty`,
+      headers: hostAuth,
+      payload: { difficulty: 'Pro' },
+    });
+    expect(asHost.statusCode).toBe(200);
+    expect(asHost.json().rts.difficulty).toBe('Pro');
+
+    // Once the match is running, difficulty is locked in.
+    const secondFactionId = RTS_FACTIONS[1]!.id;
+    await ctx.app.inject({ method: 'POST', url: `/v1/sessions/${sessionId}/rts/join`, headers: guestAuth, payload: { factionId: secondFactionId } });
+    await ctx.app.inject({ method: 'POST', url: `/v1/sessions/${sessionId}/rts/ready`, headers: hostAuth });
+    await ctx.app.inject({ method: 'POST', url: `/v1/sessions/${sessionId}/rts/ready`, headers: guestAuth });
+
+    const afterStart = await ctx.app.inject({
+      method: 'PATCH',
+      url: `/v1/sessions/${sessionId}/rts/difficulty`,
+      headers: hostAuth,
+      payload: { difficulty: 'Beginner' },
+    });
+    expect(afterStart.statusCode).toBe(409);
+  });
 });

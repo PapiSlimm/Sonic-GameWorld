@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Sonic GameWorld web app image — one Dockerfile, six Next.js apps, selected by the APP build arg
 # (studio | marketplace | player | creator | admin | developer-portal).
 #
@@ -11,7 +12,6 @@
 # a standalone server bundle. Adding `output: 'standalone'` to each app's next.config.mjs (a small
 # change owned by the apps/* packages, not this Dockerfile) would let this image switch to
 # Next.js's standalone runner and shrink meaningfully — worth doing once traffic/cost justifies it.
-syntax=docker/dockerfile:1
 
 FROM node:20-slim AS base
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate

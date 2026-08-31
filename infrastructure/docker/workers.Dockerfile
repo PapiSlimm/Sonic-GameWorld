@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Sonic GameWorld combined workers image — one image, all 6 BullMQ workers
 # (ai-generation, analytics, asset-processing, builds, moderation, thumbnails), selected at
 # runtime by the WORKER env var: a single worker name, or "all" to run every worker as its own
@@ -5,7 +6,6 @@
 #
 # Build from the REPO ROOT:
 #   docker build -f infrastructure/docker/workers.Dockerfile -t gameworld-workers .
-syntax=docker/dockerfile:1
 
 FROM node:20-slim AS base
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate

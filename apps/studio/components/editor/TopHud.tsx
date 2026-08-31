@@ -13,6 +13,7 @@ import {
   Drama,
   Gamepad2,
   Map,
+  Mountain,
   Orbit,
   Plane,
   Redo2,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useStudioStore } from '../../lib/store';
 import { formatTimeOfDay, titleCase } from '../../lib/format';
+import { CoverCellDialog, RtsMapPanel } from './RtsMapPanel';
 
 const CAMERA_ICONS: Record<CameraMode, React.ComponentType<{ className?: string }>> = {
   ORBIT: Orbit,
@@ -77,6 +79,7 @@ export function TopHud({ document }: TopHudProps) {
   const cameraMode = useStudioStore((s) => s.cameraMode);
   const setCameraMode = useStudioStore((s) => s.setCameraMode);
   const setEnvironment = useStudioStore((s) => s.setEnvironment);
+  const rtsBiome = useStudioStore((s) => s.rtsMapConfig().biome);
   const addEntity = useStudioStore((s) => s.addEntity);
   const offline = useStudioStore((s) => s.offline);
   const dirty = useStudioStore((s) => s.dirty);
@@ -85,6 +88,7 @@ export function TopHud({ document }: TopHudProps) {
   const canUndo = useStudioStore((s) => s.canUndo());
   const canRedo = useStudioStore((s) => s.canRedo());
   const popover = usePopover();
+  const [coverPaintOpen, setCoverPaintOpen] = useState(false);
 
   const counts = countByKind(document);
 
@@ -206,6 +210,15 @@ export function TopHud({ document }: TopHudProps) {
             </div>
           </PopoverButton>
 
+          <PopoverButton id="rts-map" popover={popover} icon={Mountain} label={`RTS Map · ${titleCase(rtsBiome)}`}>
+            <RtsMapPanel
+              onOpenPaint={() => {
+                setCoverPaintOpen(true);
+                popover.close();
+              }}
+            />
+          </PopoverButton>
+
           <PopoverButton id="events" popover={popover} icon={Zap} label={`Events · ${counts.TRIGGER}`}>
             <div className="flex w-64 flex-col gap-2 p-3">
               <p className="text-xs text-muted">{counts.TRIGGER} trigger volume(s) in this world.</p>
@@ -216,6 +229,8 @@ export function TopHud({ document }: TopHudProps) {
           </PopoverButton>
         </div>
       </div>
+
+      <CoverCellDialog document={document} open={coverPaintOpen} onClose={() => setCoverPaintOpen(false)} />
     </div>
   );
 }

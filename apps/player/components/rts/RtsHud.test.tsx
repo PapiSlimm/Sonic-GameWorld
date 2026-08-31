@@ -17,6 +17,7 @@ describe('RtsHud', () => {
         selectedUnitIds={[]}
         possessedUnitId={null}
         desynced={false}
+        alliedStrikeFactionId={null}
         onPossess={() => {}}
         onReleasePossession={() => {}}
       />,
@@ -34,6 +35,7 @@ describe('RtsHud', () => {
         selectedUnitIds={['unit-1']}
         possessedUnitId={null}
         desynced={false}
+        alliedStrikeFactionId={null}
         onPossess={() => {}}
         onReleasePossession={() => {}}
       />,
@@ -49,6 +51,7 @@ describe('RtsHud', () => {
         selectedUnitIds={['unit-1']}
         possessedUnitId="unit-1"
         desynced={false}
+        alliedStrikeFactionId={null}
         onPossess={() => {}}
         onReleasePossession={() => {}}
       />,
@@ -66,6 +69,7 @@ describe('RtsHud', () => {
         selectedUnitIds={[]}
         possessedUnitId={null}
         desynced
+        alliedStrikeFactionId={null}
         onPossess={() => {}}
         onReleasePossession={() => {}}
       />,
@@ -81,6 +85,7 @@ describe('RtsHud', () => {
         selectedUnitIds={[]}
         possessedUnitId={null}
         desynced={false}
+        alliedStrikeFactionId={null}
         onPossess={() => {}}
         onReleasePossession={() => {}}
       />,
@@ -97,10 +102,44 @@ describe('RtsHud', () => {
         selectedUnitIds={[]}
         possessedUnitId={null}
         desynced={false}
+        alliedStrikeFactionId={null}
         onPossess={() => {}}
         onReleasePossession={() => {}}
       />,
     );
     expect(html).toContain('Draw');
+  });
+
+  it('shows a clear allied-strike warning banner naming the striking faction (docs/RTS-CONTRACTS.md §9)', () => {
+    const html = renderToStaticMarkup(
+      <RtsHud
+        match={makeMatch()}
+        localFactionId={RTS_FACTIONS[0]!.id}
+        selectedUnitIds={[]}
+        possessedUnitId={null}
+        desynced={false}
+        alliedStrikeFactionId={RTS_FACTIONS[1]!.id}
+        onPossess={() => {}}
+        onReleasePossession={() => {}}
+      />,
+    );
+    expect(html).toContain(RTS_FACTIONS[1]!.name);
+    expect(html).toContain('coordinated strike is inbound');
+  });
+
+  it('shows no allied-strike banner when none is active', () => {
+    const html = renderToStaticMarkup(
+      <RtsHud
+        match={makeMatch()}
+        localFactionId={RTS_FACTIONS[0]!.id}
+        selectedUnitIds={[]}
+        possessedUnitId={null}
+        desynced={false}
+        alliedStrikeFactionId={null}
+        onPossess={() => {}}
+        onReleasePossession={() => {}}
+      />,
+    );
+    expect(html).not.toContain('coordinated strike');
   });
 });

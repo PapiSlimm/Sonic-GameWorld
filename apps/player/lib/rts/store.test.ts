@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { RTS_FACTIONS, serializeMatch } from '@sonic-gameworld/rts-sim';
+import { ALLIED_STRIKE_MAP_CONTROL_THRESHOLD, RTS_BUILDING_STATS, RTS_FACTIONS, RTS_UNIT_STATS, serializeMatch, type RTSBuilding, type RTSUnit } from '@sonic-gameworld/rts-sim';
 import type { GameSession, RtsMatchStartPayload, RtsSessionInfo } from '@sonic-gameworld/gameworld-sdk';
 import { receiveRemoteStateHash, useRtsStore } from './store';
 import { buildMoveCommand } from './commands';
@@ -33,7 +33,7 @@ function makeLobby(overrides: Partial<RtsSessionInfo> = {}): RtsSessionInfo {
   };
 }
 
-function matchStartPayload(): RtsMatchStartPayload {
+function matchStartPayload(overrides: Partial<RtsMatchStartPayload> = {}): RtsMatchStartPayload {
   return {
     sessionId: 'session-1',
     gameId: 'game-1',
@@ -44,6 +44,47 @@ function matchStartPayload(): RtsMatchStartPayload {
     difficulty: 'Intermediate',
     factions: RTS_FACTIONS.map((f, i) => ({ factionId: f.id, isAIControlled: i !== 0 })),
     factionAssignments: { [RTS_FACTIONS[0]!.id]: 'host-user', [RTS_FACTIONS[1]!.id]: null },
+    ...overrides,
+  };
+}
+
+function building(factionId: string, cellX: number): RTSBuilding {
+  return {
+    id: `test-building-${factionId}-${cellX}`,
+    factionId,
+    buildingClass: 'BARRACKS',
+    cellX,
+    cellZ: 0,
+    sizeCells: { ...RTS_BUILDING_STATS.BARRACKS.sizeCells },
+    health: RTS_BUILDING_STATS.BARRACKS.health,
+    maxHealth: RTS_BUILDING_STATS.BARRACKS.health,
+    isOperational: true,
+  };
+}
+
+function allyUnit(factionId: string): RTSUnit {
+  const stats = RTS_UNIT_STATS.INFANTRY;
+  return {
+    id: `test-ally-unit-${factionId}`,
+    factionId,
+    unitClass: 'INFANTRY',
+    transform: { position: { x: 0, y: 0, z: 0 }, rotationY: 0 },
+    velocity: { x: 0, y: 0, z: 0 },
+    path: [],
+    health: stats.health,
+    maxHealth: stats.health,
+    speed: stats.speed,
+    attackRange: stats.attackRange,
+    damage: stats.damage,
+    detectionRadius: stats.detectionRadius,
+    state: 'IDLE',
+    commands: [],
+    targetNodeId: null,
+    lastFiredAtTick: 0,
+    harvestedSotolium: 0,
+    isDetected: true,
+    heat: 0,
+    isSelected: false,
   };
 }
 
@@ -157,6 +198,40 @@ describe('useRtsStore', () => {
     useRtsStore.getState().applySnapshot(snapshotJson);
     expect(useRtsStore.getState().match!.tick).toBe(later.tick);
     expect(useRtsStore.getState().phase).toBe('PLAYING');
+  });
+
+  it('startMatch applies the session difficulty to AI-controlled factions only (docs/RTS-CONTRACTS.md §9)', () => {
+    useRtsStore.getState().startMatch(matchStartPayload({ difficulty: 'Pro' }), 'host-user');
+    const { match } = useRtsStore.getState();
+    const humanFaction = match!.factions.find((f) => f.factionId === RTS_FACTIONS[0]!.id)!;
+    const aiFaction = match!.factions.find((f) => f.factionId === RTS_FACTIONS[1]!.id)!;
+    expect(humanFaction.difficulty).toBeUndefined();
+    expect(aiFaction.difficulty).toBe('PRO');
+  });
+
+  it('threads the default Intermediate difficulty from matchStartPayload() onto the AI faction', () => {
+    useRtsStore.getState().startMatch(matchStartPayload(), 'host-user');
+    const { match } = useRtsStore.getState();
+    const aiFaction = match!.factions.find((f) => f.factionId === RTS_FACTIONS[1]!.id)!;
+    expect(aiFaction.difficulty).toBe('INTERMEDIATE');
+  });
+
+  it('advance() surfaces an allied-strike warning once a PRO faction with allies crosses the map-control threshold', () => {
+    const ALLY = 'allied-faction-1';
+    useRtsStore.getState().startMatch(matchStartPayload(), 'host-user');
+    const dragonId = RTS_FACTIONS[1]!.id;
+    const match = useRtsStore.getState().match!;
+
+    // Give Dragon overwhelming building control and the ally a unit to strike with.
+    for (const b of match.entities.buildings) b.factionId = dragonId;
+    match.entities.buildings.push(building(dragonId, 900));
+    match.factions = match.factions.map((f) => (f.factionId === dragonId ? { ...f, difficulty: 'PRO', alliedFactionIds: [ALLY] } : f));
+    match.entities.units.push(allyUnit(ALLY));
+    useRtsStore.setState({ match });
+    expect(ALLIED_STRIKE_MAP_CONTROL_THRESHOLD).toBeLessThan(1);
+
+    useRtsStore.getState().advance(FIXED_DT_SECONDS);
+    expect(useRtsStore.getState().alliedStrikeFactionId).toBe(dragonId);
   });
 
   it('selectUnits and possess update local UI state', () => {

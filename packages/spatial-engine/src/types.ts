@@ -157,4 +157,24 @@ export const RENDERABLE_KINDS: EntityKind[] = [
   'RTS_UNIT', 'RTS_BUILDING',
 ];
 
+/**
+ * Cheap geometry sub-buckets *within* the single `RTS_UNIT` `EntityKind` (docs/RTS-CONTRACTS.md
+ * §9's expanded `unitType` roster made visually distinct without a per-archetype mesh — see
+ * `engine/entities.ts`'s `bucketFor`/`geometryForKind` and `rts/syncEntities.ts`, plus the README's
+ * "RTS integration" section for the full rationale). Deliberately *not* a zod/EntityKind enum
+ * change — `EntityKind` stays exactly as `world-schema` defines it; this is an internal instancing
+ * key chosen from `RTSUnit.unitClass`/`isNavalUnit`, so no schema migration is needed to add roster
+ * variety. Values intentionally line up with `UnitClass` (`INFANTRY`/`ARMORED`/`AIR`) plus one cross-
+ * cutting `NAVAL` bucket for `isNavalUnit` archetypes, which `rts-sim` models as `unitClass:
+ * 'ARMORED'` (see its README) but which should read as a hull, not a tank, at RTS zoom.
+ */
+export type RTSUnitGeometryBucket = 'INFANTRY' | 'ARMORED' | 'AIR' | 'NAVAL';
+
+/**
+ * Cheap geometry sub-buckets within `RTS_BUILDING`: a boxy silhouette for every production
+ * building (`REFINERY`/`BARRACKS`/`FACTORY`/`AIRFIELD`) vs. a taller one for `RADAR` (the "tech"
+ * building) so a radar array reads as visually distinct at a glance, per docs/RTS-CONTRACTS.md §6.
+ */
+export type RTSBuildingGeometryBucket = 'PRODUCTION' | 'TECH';
+
 export type { WorldDocument, WorldEntity, WorldLayer, WorldEnvironment };

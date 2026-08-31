@@ -12,7 +12,9 @@ describe('createRtsViewportRuntime', () => {
     const onChange = vi.fn();
     runtime.subscribe(onChange);
 
-    const markers = [{ id: 'u1', factionId: 'raven-alliance', unitClass: 'INFANTRY', screen: { x: 1, y: 2 }, health: 80, maxHealth: 100, isSelected: true }];
+    const markers = [
+      { id: 'u1', factionId: 'raven-alliance', unitClass: 'INFANTRY', screen: { x: 1, y: 2 }, health: 80, maxHealth: 100, isSelected: true, heat: 0.2, isThermallyDetected: false },
+    ];
     runtime.setUnitMarkers(markers);
 
     expect(runtime.getSnapshot().unitMarkers).toEqual(markers);

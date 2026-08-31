@@ -19,13 +19,15 @@ import {
   serializeMatch,
   stateHash,
   RTS_FACTIONS,
+  type DifficultyLevel,
   type FactionSetup,
   type RTSCommand,
   type RTSMatchState,
 } from '@sonic-gameworld/rts-sim';
-import type { GameSession, RtsMatchStartPayload, RtsSessionInfo } from '@sonic-gameworld/gameworld-sdk';
+import type { GameSession, RtsDifficulty, RtsMatchStartPayload, RtsSessionInfo } from '@sonic-gameworld/gameworld-sdk';
 import { seedStartingScenario } from './scenario';
 import { advanceFixedSteps, createCommandBuffer, scheduleCommand, type CommandBuffer } from './lockstep';
+import { detectAlliedStrikeWarning } from './alliedStrike';
 
 /** How often (in ticks) every peer publishes `stateHash()` for desync *detection* — not
  * correction (docs/RTS-CONTRACTS.md §5, a documented known limitation). 25 ticks @ 10Hz ≈ 2.5s. */
@@ -61,6 +63,11 @@ interface RtsState {
 
   selectedUnitIds: string[];
   possessedUnitId: string | null;
+
+  /** docs/RTS-CONTRACTS.md §9: the faction currently mid-coordinated-strike, or null — see
+   * `lib/rts/alliedStrike.ts`'s doc comment for why this is recomputed each `advance()` rather than
+   * a flag `rts-sim` itself exposes. Drives `RtsHud`'s warning banner. */
+  alliedStrikeFactionId: string | null;
 
   desynced: boolean;
   localHashHistory: Map<number, string>;
@@ -100,8 +107,28 @@ interface RtsState {
   reset(): void;
 }
 
-function factionAssignmentsToSetups(factionAssignments: Record<string, string | null>): FactionSetup[] {
-  return RTS_FACTIONS.map((faction) => ({ factionId: faction.id, isAIControlled: factionAssignments[faction.id] == null }));
+/** `RtsDifficulty` ('Beginner'|'Intermediate'|'Pro', the wire/SDK casing) -> rts-sim's
+ * `DifficultyLevel` ('BEGINNER'|'INTERMEDIATE'|'PRO') — the two enums are the same three levels in
+ * different casing conventions (SDK types stay decoupled from rts-sim's internal types — see
+ * gameworld-sdk's types.ts doc comment on `RtsDifficulty`), so this is a pure case conversion. */
+function toDifficultyLevel(difficulty: RtsDifficulty): DifficultyLevel {
+  return difficulty.toUpperCase() as DifficultyLevel;
+}
+
+/** Builds the pinned `FactionSetup[]` shape `createMatch` takes, from the lobby's faction roster +
+ * session difficulty. `difficulty` (docs/RTS-CONTRACTS.md §9) is applied only to AI-controlled
+ * factions — `FactionSetup.difficulty` only ever affects `runCommanderAI`, which only ever runs for
+ * `isAIControlled` factions, so setting it on a human-controlled faction would be inert but is
+ * still worth omitting for clarity. */
+function factionAssignmentsToSetups(factionAssignments: Record<string, string | null>, difficulty?: RtsDifficulty): FactionSetup[] {
+  return RTS_FACTIONS.map((faction) => {
+    const isAIControlled = factionAssignments[faction.id] == null;
+    return {
+      factionId: faction.id,
+      isAIControlled,
+      ...(isAIControlled && difficulty ? { difficulty: toDifficultyLevel(difficulty) } : {}),
+    };
+  });
 }
 
 export const useRtsStore = create<RtsState>()((set, get) => ({
@@ -111,6 +138,7 @@ export const useRtsStore = create<RtsState>()((set, get) => ({
   accumulatorSeconds: 0,
   selectedUnitIds: [],
   possessedUnitId: null,
+  alliedStrikeFactionId: null,
   desynced: false,
   localHashHistory: new Map(),
   pendingRemoteHashes: new Map(),
@@ -138,7 +166,7 @@ export const useRtsStore = create<RtsState>()((set, get) => ({
   },
 
   startMatch(payload, localUserId) {
-    const factions = factionAssignmentsToSetups(payload.factionAssignments);
+    const factions = factionAssignmentsToSetups(payload.factionAssignments, payload.difficulty);
     const fresh = seedStartingScenario(
       createMatch({ seed: payload.seed, mapWidthM: payload.mapWidthM, mapDepthM: payload.mapDepthM, cellSizeM: payload.cellSizeM, factions }),
     );
@@ -149,6 +177,7 @@ export const useRtsStore = create<RtsState>()((set, get) => ({
       accumulatorSeconds: 0,
       selectedUnitIds: [],
       possessedUnitId: null,
+      alliedStrikeFactionId: null,
       desynced: false,
       localHashHistory: new Map(),
       pendingRemoteHashes: new Map(),
@@ -212,6 +241,7 @@ export const useRtsStore = create<RtsState>()((set, get) => ({
       localHashHistory: nextHashHistory,
       pendingRemoteHashes: nextPendingRemote,
       desynced,
+      alliedStrikeFactionId: detectAlliedStrikeWarning(result.state),
       phase: gameOver ? 'GAME_OVER' : get().phase,
     });
   },
@@ -259,6 +289,7 @@ export const useRtsStore = create<RtsState>()((set, get) => ({
       accumulatorSeconds: 0,
       selectedUnitIds: [],
       possessedUnitId: null,
+      alliedStrikeFactionId: null,
       desynced: false,
       localHashHistory: new Map(),
       pendingRemoteHashes: new Map(),

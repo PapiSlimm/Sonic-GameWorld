@@ -2,7 +2,9 @@
 
 import { create } from 'zustand';
 import { diffWorlds, randomUuid, touchWorld, type CameraMode, type WorldDiff, type WorldEnvironment } from '@sonic-gameworld/world-schema';
+import type { Biome } from '@sonic-gameworld/rts-sim';
 import type { AIDenied, CameraRig, CinematicSequence, EntityPatch, MissionDefinition, ToolExecution, World, WorldDocument, WorldEntity } from '@sonic-gameworld/gameworld-sdk';
+import { defaultRtsMapConfig, getRtsMapConfig, paintRtsCoverCells, withRtsMapConfig, type RtsMapConfig } from './rtsMap';
 
 const MAX_HISTORY = 50;
 
@@ -66,6 +68,11 @@ export interface StudioState {
   toggleLayerVisible: (layerId: string) => void;
   toggleLayerLock: (layerId: string) => void;
   setEnvironment: (patch: Partial<WorldEnvironment>) => void;
+
+  // RTS map authoring (docs/RTS-CONTRACTS.md §6/§9) — see lib/rtsMap.ts for the persisted shape.
+  rtsMapConfig: () => RtsMapConfig;
+  setRtsBiome: (biome: Biome) => void;
+  paintRtsCoverCells: (cells: { cellX: number; cellZ: number }[], value: 0 | 1) => void;
 
   addMission: (mission: MissionDefinition) => void;
   updateMission: (id: string, patch: Partial<MissionDefinition>) => void;
@@ -235,6 +242,21 @@ export const useStudioStore = create<StudioState>((set, get) => ({
     const { document, commitDocument } = get();
     if (!document) return;
     commitDocument({ ...document, environment: { ...document.environment, ...patch } }, 'Updated environment');
+  },
+
+  rtsMapConfig: () => {
+    const { document } = get();
+    return document ? getRtsMapConfig(document) : defaultRtsMapConfig();
+  },
+  setRtsBiome: (biome) => {
+    const { document, commitDocument } = get();
+    if (!document) return;
+    commitDocument(withRtsMapConfig(document, { biome }), `Set RTS biome to ${biome}`);
+  },
+  paintRtsCoverCells: (cells, value) => {
+    const { document, commitDocument } = get();
+    if (!document) return;
+    commitDocument(paintRtsCoverCells(document, cells, value), value ? 'Painted RTS cover cells' : 'Erased RTS cover cells');
   },
 
   addMission: (mission) => {

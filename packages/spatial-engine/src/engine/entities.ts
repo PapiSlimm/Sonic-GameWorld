@@ -3,6 +3,54 @@ import type { EntityKind, LayerKind, Transform, WorldEntity } from '@sonic-gamew
 import { ENTITY_KIND_COLORS, ENTITY_KIND_RADIUS, RENDERABLE_KINDS } from '../types.js';
 import { loadGLTF } from './gltf.js';
 
+/**
+ * `WorldEntity.metadata` key an entity can set to select a geometry *sub*-bucket within its
+ * `EntityKind`'s shared `InstancedMesh` bucket — see `bucketFor`/`geometryForKind` below. Currently
+ * only `RTS_UNIT`/`RTS_BUILDING` use this (`rts/syncEntities.ts` sets it from `unitClass`/
+ * `isNavalUnit`/`buildingClass`); an entity with no value here, or a value `geometryForKind` doesn't
+ * recognize for its kind, renders on that kind's original single default bucket exactly as before —
+ * this is what keeps every non-RTS `WorldEntity`, and any RTS_UNIT/RTS_BUILDING spawned by a caller
+ * that predates this (e.g. a bare Studio-palette placeholder with no match state yet), unaffected.
+ */
+export const GEOMETRY_BUCKET_METADATA_KEY = 'geometryBucket';
+
+/**
+ * `WorldEntity.metadata` key for a per-instance tint (a `#rrggbb` hex string), applied instead of
+ * the kind's shared `ENTITY_KIND_COLORS` base tint when set. `rts/syncEntities.ts` uses this to
+ * carry `getTeamColor(factionId, biome)` onto each spawned RTS_UNIT/RTS_BUILDING instance, since
+ * per-faction tinting only makes sense per-instance, not per-bucket.
+ */
+export const TEAM_COLOR_METADATA_KEY = 'teamColor';
+
+/** The only `GEOMETRY_BUCKET_METADATA_KEY` values `geometryForKind` actually branches on, per kind
+ * (see `geometryForRTSUnitBucket`/`geometryForRTSBuildingBucket` above) — every other kind ignores
+ * the metadata key entirely, and an unrecognized value for a kind that *does* use it collapses to
+ * that kind's single default bucket rather than fragmenting into a redundant identical-geometry
+ * bucket. Keeps a stray/misspelled hint, or one set on the wrong kind, harmless instead of quietly
+ * wasting a draw call. */
+const RTS_UNIT_GEOMETRY_BUCKETS = new Set(['INFANTRY', 'ARMORED', 'AIR', 'NAVAL']);
+const RTS_BUILDING_GEOMETRY_BUCKETS = new Set(['PRODUCTION', 'TECH']);
+
+function geometryBucketOf(entity: WorldEntity): string | undefined {
+  const value = entity.metadata?.[GEOMETRY_BUCKET_METADATA_KEY];
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  if (entity.kind === 'RTS_UNIT') return RTS_UNIT_GEOMETRY_BUCKETS.has(value) ? value : undefined;
+  if (entity.kind === 'RTS_BUILDING') return RTS_BUILDING_GEOMETRY_BUCKETS.has(value) ? value : undefined;
+  return undefined;
+}
+
+function teamColorOf(entity: WorldEntity): string | undefined {
+  const value = entity.metadata?.[TEAM_COLOR_METADATA_KEY];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+/** Composite key `buckets` is actually keyed by — `kind` alone when there's no sub-bucket variant
+ * (every non-RTS kind, and any RTS entity without a recognized `geometryBucket` hint), `kind::variant`
+ * when there is, so different variants of the same `EntityKind` never share an `InstancedMesh`. */
+function bucketKeyFor(kind: EntityKind, variant: string | undefined): string {
+  return variant ? `${kind}::${variant}` : kind;
+}
+
 export const ENTITY_KIND_TO_LAYER: Record<EntityKind, LayerKind> = {
   REGION: 'ENTITIES',
   ZONE: 'ENTITIES',
@@ -30,7 +78,57 @@ export const ENTITY_KIND_TO_LAYER: Record<EntityKind, LayerKind> = {
 
 const INITIAL_CAPACITY = 32;
 
-function geometryForKind(kind: EntityKind, radius: number): THREE.BufferGeometry {
+/**
+ * Sub-bucket geometry for `RTS_UNIT` (see `RTSUnitGeometryBucket` in `../types.ts`). Each variant
+ * is still a single cheap primitive — no merged/multi-part meshes — so every bucket stays one draw
+ * call for however many units share it, exactly like the pre-existing shared-capsule bucket did;
+ * only the *shape* now varies by unit family instead of just per-instance `transform.scale`
+ * (`rts/syncEntities.ts` still layers per-`unitClass` scale on top of whichever bucket a unit
+ * lands in, for extra size read within a family). An unrecognized/absent variant (a bare
+ * `RTS_UNIT` spawned outside `syncRTSEntities`, e.g. a Studio-palette placeholder) falls back to
+ * the original generic-infantry-shaped capsule so it renders exactly as it did before this change.
+ */
+function geometryForRTSUnitBucket(radius: number, variant: string | undefined): THREE.BufferGeometry {
+  switch (variant) {
+    case 'ARMORED':
+      // Low, wide box — tank/APC silhouette, distinct from infantry at a glance.
+      return new THREE.BoxGeometry(radius * 1.6, radius * 0.7, radius * 2.2);
+    case 'AIR':
+      // Flattened diamond/wing — an Octahedron squashed on Y reads as a small aircraft silhouette
+      // from the RTS camera's steep overhead pitch without a dedicated wing mesh.
+      return new THREE.OctahedronGeometry(radius * 1.1, 0).scale(1.4, 0.35, 1);
+    case 'NAVAL':
+      // Elongated, flat hull box — reads as a ship, not a tank, despite sharing `unitClass:
+      // 'ARMORED'` in rts-sim (see that package's README on why naval archetypes don't get their
+      // own UnitClass).
+      return new THREE.BoxGeometry(radius * 1.3, radius * 0.5, radius * 3.2);
+    case 'INFANTRY':
+    default:
+      // Thin capsule — approximates "a squad" silhouette by proportion (narrow + upright) rather
+      // than literally merging multiple capsules into one geometry, which would cost real
+      // triangle/attribute-merge complexity for a shape that reads the same at RTS zoom anyway.
+      return new THREE.CapsuleGeometry(radius * 0.35, radius * 0.9, 4, 8);
+  }
+}
+
+/**
+ * Sub-bucket geometry for `RTS_BUILDING` (see `RTSBuildingGeometryBucket` in `../types.ts`). Both
+ * variants share the same X/Z footprint (`radius * 2`) as the original single box so
+ * `rts/syncEntities.ts`'s per-instance footprint scaling (`sizeCells * cellSizeM` against that same
+ * base footprint) stays correct regardless of which bucket a building lands in — only height
+ * differs, which is enough to read "production building" vs. "tall radar/tech mast" apart.
+ */
+function geometryForRTSBuildingBucket(radius: number, variant: string | undefined): THREE.BufferGeometry {
+  switch (variant) {
+    case 'TECH':
+      return new THREE.BoxGeometry(radius * 2, radius * 3.2, radius * 2);
+    case 'PRODUCTION':
+    default:
+      return new THREE.BoxGeometry(radius * 2, radius * 1.4, radius * 2);
+  }
+}
+
+function geometryForKind(kind: EntityKind, radius: number, variant?: string): THREE.BufferGeometry {
   switch (kind) {
     case 'NPC':
     case 'ITEM':
@@ -45,14 +143,13 @@ function geometryForKind(kind: EntityKind, radius: number): THREE.BufferGeometry
     case 'TRIGGER':
     case 'VOLUME':
       return new THREE.BoxGeometry(radius * 2, radius * 2, radius * 2);
-    // RTS game template (docs/RTS-CONTRACTS.md §6): cheap primitives — dozens of units on screen
-    // at once share one InstancedMesh per kind, so this stays a capsule/box regardless of
-    // `unitClass`/`buildingClass`; per-instance size variety comes from `transform.scale`, set by
-    // `src/rts/syncEntities.ts` (a capsule reads as "unit" at a glance without a per-class mesh).
+    // RTS game template (docs/RTS-CONTRACTS.md §6, §9): cheap primitives, sub-bucketed by
+    // `GEOMETRY_BUCKET_METADATA_KEY` (see the two helpers above) so dozens of units on screen still
+    // share one InstancedMesh *per family* — a handful of draw calls total, not one per archetype.
     case 'RTS_UNIT':
-      return new THREE.CapsuleGeometry(radius * 0.45, radius, 4, 8);
+      return geometryForRTSUnitBucket(radius, variant);
     case 'RTS_BUILDING':
-      return new THREE.BoxGeometry(radius * 2, radius * 1.4, radius * 2);
+      return geometryForRTSBuildingBucket(radius, variant);
     case 'BUILDING':
     case 'ROOM':
     case 'PROP':
@@ -73,6 +170,11 @@ interface InstancedBucket {
 export interface EntitySlot {
   entity: WorldEntity;
   kind: EntityKind;
+  /** The `GEOMETRY_BUCKET_METADATA_KEY` value this entity spawned with, if any — remembered here
+   * (rather than re-read from `entity.metadata` on every call) so `move`/`remove`/`setSelected`/
+   * `applyLOD` always resolve back to the exact same `InstancedBucket` a `mode: 'instanced'` slot
+   * was placed in, even if a later `move()` call's `Transform` carries no metadata of its own. */
+  variant?: string;
   mode: 'instanced' | 'glb' | 'skipped';
   index?: number;
   object3D?: THREE.Object3D;
@@ -94,11 +196,17 @@ const defaultResolveAssetUrl: ResolveAssetUrl = (assetRef, cdnBaseUrl) => {
 /**
  * Owns instanced-primitive rendering for every entity kind, GLB loading for entities with an
  * `assetRef` + `cdnBaseUrl`, and the always-present LOD billboard sprites. One InstancedMesh per
- * EntityKind (grown by doubling capacity) keeps draw calls flat regardless of entity count.
+ * EntityKind (grown by doubling capacity) keeps draw calls flat regardless of entity count — or,
+ * for a kind that opts into `GEOMETRY_BUCKET_METADATA_KEY` sub-bucketing (RTS_UNIT/RTS_BUILDING),
+ * one InstancedMesh per (kind, variant) pair: still a small, fixed number of draw calls no matter
+ * how many *instances* of that kind exist, just one per visually-distinct *family* now instead of
+ * per kind.
  */
 export class EntityRegistry {
   readonly slots = new Map<string, EntitySlot>();
-  private buckets = new Map<EntityKind, InstancedBucket>();
+  /** Keyed by `bucketKeyFor(kind, variant)` — `kind` alone for the common case, `kind::variant`
+   * for a sub-bucketed RTS_UNIT/RTS_BUILDING (see that helper's doc comment above). */
+  private buckets = new Map<string, InstancedBucket>();
   private glbGroup = new THREE.Group();
   private billboardGroup = new THREE.Group();
   private layerGroups: Map<LayerKind, THREE.Group>;
@@ -122,11 +230,12 @@ export class EntityRegistry {
     this.layerGroups.get('ENTITIES')?.add(this.billboardGroup);
   }
 
-  private bucketFor(kind: EntityKind): InstancedBucket {
-    let bucket = this.buckets.get(kind);
+  private bucketFor(kind: EntityKind, variant?: string): InstancedBucket {
+    const key = bucketKeyFor(kind, variant);
+    let bucket = this.buckets.get(key);
     if (bucket) return bucket;
     const radius = ENTITY_KIND_RADIUS[kind] || 1;
-    const geometry = geometryForKind(kind, radius);
+    const geometry = geometryForKind(kind, radius, variant);
     const baseColor = new THREE.Color(ENTITY_KIND_COLORS[kind]);
     const material = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.7, metalness: 0.1 });
     const mesh = new THREE.InstancedMesh(geometry, material, INITIAL_CAPACITY);
@@ -138,7 +247,7 @@ export class EntityRegistry {
     const group = this.layerGroups.get(layerKind);
     (group ?? this.layerGroups.get('ENTITIES')!).add(mesh);
     bucket = { mesh, capacity: INITIAL_CAPACITY, count: 0, idAtIndex: new Array(INITIAL_CAPACITY).fill(null), freeList: [], baseColor };
-    this.buckets.set(kind, bucket);
+    this.buckets.set(key, bucket);
     return bucket;
   }
 
@@ -234,7 +343,8 @@ export class EntityRegistry {
   }
 
   private spawnInstanced(entity: WorldEntity, billboard: THREE.Sprite): EntitySlot {
-    const bucket = this.bucketFor(entity.kind);
+    const variant = geometryBucketOf(entity);
+    const bucket = this.bucketFor(entity.kind, variant);
     let index: number;
     if (bucket.freeList.length > 0) {
       index = bucket.freeList.pop()!;
@@ -246,10 +356,13 @@ export class EntityRegistry {
     }
     bucket.idAtIndex[index] = entity.id;
     bucket.mesh.setMatrixAt(index, this.transformToMatrix(entity.transform));
-    bucket.mesh.setColorAt(index, bucket.baseColor);
+    // A per-instance tint (e.g. RTS team color) overrides the bucket's shared base color; falls
+    // back to it when the entity carries none, matching pre-existing behavior exactly.
+    const tint = teamColorOf(entity);
+    bucket.mesh.setColorAt(index, tint ? new THREE.Color(tint) : bucket.baseColor);
     bucket.mesh.instanceMatrix.needsUpdate = true;
     if (bucket.mesh.instanceColor) bucket.mesh.instanceColor.needsUpdate = true;
-    return { entity, kind: entity.kind, mode: 'instanced', index, billboard, lod: false, selected: false };
+    return { entity, kind: entity.kind, variant, mode: 'instanced', index, billboard, lod: false, selected: false };
   }
 
   move(id: string, transform: Transform): void {
@@ -257,7 +370,7 @@ export class EntityRegistry {
     if (!slot) return;
     slot.entity = { ...slot.entity, transform };
     if (slot.mode === 'instanced' && slot.index !== undefined) {
-      const bucket = this.bucketFor(slot.kind);
+      const bucket = this.bucketFor(slot.kind, slot.variant);
       bucket.mesh.setMatrixAt(slot.index, this.transformToMatrix(transform));
       bucket.mesh.instanceMatrix.needsUpdate = true;
     } else if (slot.mode === 'glb' && slot.object3D) {
@@ -272,7 +385,7 @@ export class EntityRegistry {
     const slot = this.slots.get(id);
     if (!slot) return;
     if (slot.mode === 'instanced' && slot.index !== undefined) {
-      const bucket = this.bucketFor(slot.kind);
+      const bucket = this.bucketFor(slot.kind, slot.variant);
       bucket.idAtIndex[slot.index] = null;
       bucket.freeList.push(slot.index);
       this.tmpMatrix.makeScale(0, 0, 0);
@@ -333,8 +446,12 @@ export class EntityRegistry {
     if (!slot) return;
     slot.selected = selected;
     if (slot.mode === 'instanced' && slot.index !== undefined) {
-      const bucket = this.bucketFor(slot.kind);
-      const color = selected ? bucket.baseColor.clone().lerp(new THREE.Color(0xffffff), 0.6) : bucket.baseColor;
+      const bucket = this.bucketFor(slot.kind, slot.variant);
+      // Deselecting must restore this instance's own tint (e.g. RTS team color), not the bucket's
+      // shared base color — otherwise a selected-then-deselected unit would lose its team tint.
+      const tint = teamColorOf(slot.entity);
+      const base = tint ? new THREE.Color(tint) : bucket.baseColor;
+      const color = selected ? base.clone().lerp(new THREE.Color(0xffffff), 0.6) : base;
       bucket.mesh.setColorAt(slot.index, color);
       if (bucket.mesh.instanceColor) bucket.mesh.instanceColor.needsUpdate = true;
     }
@@ -352,7 +469,7 @@ export class EntityRegistry {
     slot.lod = far;
     slot.billboard.visible = far;
     if (slot.mode === 'instanced' && slot.index !== undefined) {
-      const bucket = this.bucketFor(slot.kind);
+      const bucket = this.bucketFor(slot.kind, slot.variant);
       const t = { ...slot.entity.transform };
       if (far) {
         this.tmpMatrix.makeScale(0, 0, 0);

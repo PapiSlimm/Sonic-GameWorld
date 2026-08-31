@@ -43,6 +43,7 @@ describe('RtsLobby', () => {
         shareUrl="https://play.example/g/game-1/rts?join=session-1"
         onJoinFaction={() => {}}
         onReady={() => {}}
+        onSetDifficulty={() => {}}
       />,
     );
 
@@ -65,6 +66,7 @@ describe('RtsLobby', () => {
         shareUrl="https://play.example/g/game-1/rts?join=session-1"
         onJoinFaction={() => {}}
         onReady={() => {}}
+        onSetDifficulty={() => {}}
       />,
     );
 
@@ -86,8 +88,65 @@ describe('RtsLobby', () => {
         shareUrl=""
         onJoinFaction={() => {}}
         onReady={() => {}}
+        onSetDifficulty={() => {}}
       />,
     );
     expect(html).toContain('That faction was just taken.');
+  });
+
+  it('lets the host pick a difficulty level, but only shows the current one (no picker) to a non-host', () => {
+    const hostHtml = renderToStaticMarkup(
+      <RtsLobby
+        gameName="Global Dominance"
+        session={session}
+        lobby={lobby()}
+        localUserId="host-user"
+        isHost
+        busy={false}
+        shareUrl=""
+        onJoinFaction={() => {}}
+        onReady={() => {}}
+        onSetDifficulty={() => {}}
+      />,
+    );
+    expect(hostHtml).toContain('Beginner');
+    expect(hostHtml).toContain('Intermediate');
+    expect(hostHtml).toContain('Pro');
+
+    const guestHtml = renderToStaticMarkup(
+      <RtsLobby
+        gameName="Global Dominance"
+        session={session}
+        lobby={lobby()}
+        localUserId="guest-user"
+        isHost={false}
+        busy={false}
+        shareUrl=""
+        onJoinFaction={() => {}}
+        onReady={() => {}}
+        onSetDifficulty={() => {}}
+      />,
+    );
+    expect(guestHtml).toContain('Intermediate'); // current difficulty, shown as text
+    expect(guestHtml).not.toContain('Beginner'); // no picker buttons for a non-host
+    expect(guestHtml).not.toContain('Pro');
+  });
+
+  it('reflects a Pro difficulty session', () => {
+    const html = renderToStaticMarkup(
+      <RtsLobby
+        gameName="Global Dominance"
+        session={session}
+        lobby={lobby({ difficulty: 'Pro' })}
+        localUserId="guest-user"
+        isHost={false}
+        busy={false}
+        shareUrl=""
+        onJoinFaction={() => {}}
+        onReady={() => {}}
+        onSetDifficulty={() => {}}
+      />,
+    );
+    expect(html).toContain('Pro');
   });
 });

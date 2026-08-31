@@ -3,8 +3,13 @@
 import { Bot, Check, Loader2, User } from 'lucide-react';
 import { Badge, Button, Panel } from '@sonic-gameworld/ui';
 import { RTS_FACTIONS } from '@sonic-gameworld/rts-sim';
-import type { GameSession, RtsSessionInfo } from '@sonic-gameworld/gameworld-sdk';
+import type { GameSession, RtsDifficulty, RtsSessionInfo } from '@sonic-gameworld/gameworld-sdk';
 import { FACTION_COLOR } from './rtsTheme';
+
+/** docs/RTS-CONTRACTS.md §9's difficulty presets, in the SDK's wire casing (`RtsDifficulty`) —
+ * matches `RTS_DIFFICULTY_PRESETS`' three levels, applied to any faction still AI-controlled once
+ * the match starts (`rts-sim`'s `DifficultyLevel`/`FactionSetup.difficulty`). */
+const DIFFICULTY_LEVELS: RtsDifficulty[] = ['Beginner', 'Intermediate', 'Pro'];
 
 export interface RtsLobbyProps {
   gameName: string;
@@ -17,6 +22,9 @@ export interface RtsLobbyProps {
   shareUrl: string;
   onJoinFaction: (factionId: string) => void;
   onReady: () => void;
+  /** Host-only (docs/RTS-CONTRACTS.md §9's difficulty picker): changes the difficulty applied to
+   * any faction still AI-controlled once the match starts. */
+  onSetDifficulty: (difficulty: RtsDifficulty) => void;
 }
 
 /**
@@ -26,7 +34,7 @@ export interface RtsLobbyProps {
  * independently; `RTS_MATCH_START` fires once they all have (server-side gate — see
  * `services/api/src/modules/games/index.ts`'s `/sessions/:id/rts/ready`).
  */
-export function RtsLobby({ gameName, session, lobby, localUserId, isHost, busy, error, shareUrl, onJoinFaction, onReady }: RtsLobbyProps) {
+export function RtsLobby({ gameName, session, lobby, localUserId, isHost, busy, error, shareUrl, onJoinFaction, onReady, onSetDifficulty }: RtsLobbyProps) {
   const localFactionId = Object.entries(lobby.factionAssignments).find(([, uid]) => uid === localUserId)?.[0];
   const isReady = lobby.readyUserIds.includes(localUserId);
   const humanCount = Object.values(lobby.factionAssignments).filter((v) => v !== null).length;
@@ -91,6 +99,28 @@ export function RtsLobby({ gameName, session, lobby, localUserId, isHost, busy, 
             );
           })}
         </div>
+      </Panel>
+
+      <Panel title="AI difficulty">
+        <p className="text-sm text-text/80">
+          Applies to any faction still on AI control when the match starts.{' '}
+          {!isHost && <span>Currently <span className="text-text">{lobby.difficulty}</span>.</span>}
+        </p>
+        {isHost ? (
+          <div className="mt-2 flex gap-2">
+            {DIFFICULTY_LEVELS.map((level) => (
+              <Button
+                key={level}
+                size="sm"
+                variant={lobby.difficulty === level ? 'primary' : 'secondary'}
+                disabled={busy}
+                onClick={() => onSetDifficulty(level)}
+              >
+                {level}
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </Panel>
 
       {error && <p className="text-sm text-danger">{error}</p>}

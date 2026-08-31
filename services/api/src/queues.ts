@@ -115,10 +115,77 @@ function buildQueues(app: FastifyInstance): Queues {
   };
 }
 
+/** One handler per queue, run in-process instead of dispatched through Redis/BullMQ. Each handler
+ * is the same `process*Job(payload, deps)` function the corresponding `workers/*` package exports
+ * — see `@sonic-gameworld/desktop` (the Electron shell), which is the only caller that constructs
+ * one of these, since it's the only place that can import all six worker packages directly without
+ * services/api itself taking a dependency on them. */
+export interface LocalQueueHandlers {
+  assetProcess(payload: AssetProcessJobPayload): Promise<unknown>;
+  aiGenerate(payload: AiGenerateJobPayload): Promise<unknown>;
+  buildCompile(payload: BuildCompileJobPayload): Promise<unknown>;
+  moderationScan(payload: ModerationScanJobPayload): Promise<unknown>;
+  analyticsRollup(payload: AnalyticsRollupJobPayload): Promise<unknown>;
+}
+
+/** Builds a `QueueLike<T>` that runs `handler` immediately in the background instead of enqueueing
+ * to Redis. Mirrors real BullMQ semantics closely enough for desktop use: `.add()` resolves right
+ * away (the caller never awaits job completion, same as a real `Queue.add()`), and the handler's
+ * own failure is caught and logged rather than left as an unhandled rejection. A `repeat` option
+ * (only ever used for the hourly analytics rollup — see app.ts) is honored as a plain hourly
+ * `setInterval` rather than parsing the actual cron pattern: desktop mode only ever needs "runs
+ * about once an hour," not exact cron semantics. */
+function createLocalQueue<T>(name: string, handler: (payload: T) => Promise<unknown>): QueueLike<T> {
+  let nextId = 1;
+  function run(data: T): void {
+    handler(data).catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error(`[local-queue:${name}] job failed:`, err instanceof Error ? err.message : err);
+    });
+  }
+  return {
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async add(jobName: string, data: T, opts?: JobsOptions) {
+      const id = `local-${name}-${nextId++}`;
+      if (opts?.repeat) {
+        run(data);
+        setInterval(() => run(data), 60 * 60 * 1000).unref();
+      } else {
+        run(data);
+      }
+      return { id, name: jobName, data };
+    },
+  };
+}
+
+/** Builds a full `Queues` decorator surface from in-process handlers — the desktop-mode
+ * alternative to `buildQueues()`'s real BullMQ `Queue` instances. See `LocalQueueHandlers`. */
+export function createLocalQueues(handlers: LocalQueueHandlers): Queues {
+  return {
+    assetProcess: createLocalQueue('asset-process', handlers.assetProcess),
+    aiGenerate: createLocalQueue('ai-generate', handlers.aiGenerate),
+    buildCompile: createLocalQueue('build-compile', handlers.buildCompile),
+    moderationScan: createLocalQueue('moderation-scan', handlers.moderationScan),
+    analyticsRollup: createLocalQueue('analytics-rollup', handlers.analyticsRollup),
+  };
+}
+
+let desktopHandlersOverride: LocalQueueHandlers | undefined;
+
+/** Production (non-test) hook for desktop mode: `@sonic-gameworld/desktop` calls this once, before
+ * the API's Fastify app is built, so `queuesPlugin` below runs every job in-process instead of
+ * requiring a real Redis connection. Call with `undefined` to clear it (mirrors
+ * `setQueuesForTests`, which still takes precedence over this when both are set). */
+export function setDesktopQueueHandlers(handlers: LocalQueueHandlers | undefined): void {
+  desktopHandlersOverride = handlers;
+}
+
 // NOTE: must be registered after `app.decorate('redis', ...)` has run (see src/app.ts) — real
-// `Queue` construction below reads `app.redis` eagerly, once.
+// `Queue` construction below reads `app.redis` eagerly, once. Precedence: an explicit test double
+// wins over desktop-mode local handlers, which win over the real Redis-backed queues.
 async function queuesPlugin(app: FastifyInstance): Promise<void> {
-  app.decorate('queues', testOverride ?? buildQueues(app));
+  const queues = testOverride ?? (desktopHandlersOverride ? createLocalQueues(desktopHandlersOverride) : buildQueues(app));
+  app.decorate('queues', queues);
 }
 
 export default fp(queuesPlugin, { name: 'queues' });

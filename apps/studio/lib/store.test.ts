@@ -134,4 +134,31 @@ describe('studio store', () => {
     expect(building.behavior?.params.factionId).toBe('united-dragon-nations');
     expect(building.behavior?.params.buildingClass).toBe('BARRACKS');
   });
+
+  it('sets the RTS map biome and persists it through undo/redo (docs/RTS-CONTRACTS.md §9)', () => {
+    expect(useStudioStore.getState().rtsMapConfig().biome).toBe('URBAN');
+
+    useStudioStore.getState().setRtsBiome('JUNGLE');
+    expect(useStudioStore.getState().rtsMapConfig().biome).toBe('JUNGLE');
+    expect(useStudioStore.getState().dirty).toBe(true);
+
+    useStudioStore.getState().undo();
+    expect(useStudioStore.getState().rtsMapConfig().biome).toBe('URBAN');
+
+    useStudioStore.getState().redo();
+    expect(useStudioStore.getState().rtsMapConfig().biome).toBe('JUNGLE');
+  });
+
+  it('paints and erases RTS cover cells, in the row-major shape RTSMap.coverCells expects (docs/RTS-CONTRACTS.md §9)', () => {
+    useStudioStore.getState().paintRtsCoverCells([{ cellX: 3, cellZ: 4 }], 1);
+    let config = useStudioStore.getState().rtsMapConfig();
+    const gridWidth = Math.ceil(
+      (useStudioStore.getState().document!.bounds.max.x - useStudioStore.getState().document!.bounds.min.x) / config.cellSizeM,
+    );
+    expect(config.coverCells[4 * gridWidth + 3]).toBe(1);
+
+    useStudioStore.getState().paintRtsCoverCells([{ cellX: 3, cellZ: 4 }], 0);
+    config = useStudioStore.getState().rtsMapConfig();
+    expect(config.coverCells[4 * gridWidth + 3]).toBe(0);
+  });
 });

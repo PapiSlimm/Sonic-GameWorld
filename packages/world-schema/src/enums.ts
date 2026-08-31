@@ -14,14 +14,71 @@ export interface PlanDefinition {
   assets: number;
   /** -1 = unlimited */
   teamMembers: number;
+  /** Short marketing-facing highlights shown on the pricing table (PlanTierTable.tsx); not used
+   * for any entitlement check — those stay purely numeric (projects/assets/teamMembers/feePct). */
+  features: string[];
 }
 
+/** STUDIO and ENTERPRISE were repriced (149->199, 999->1499) to reflect what's actually shipped
+ * in those tiers now, beyond the original numeric-limits-only spec (docs/CONTRACTS.md §4): the
+ * full RTS/"Global Dominance" real-time-strategy creation toolset (Studio biome + cover-cell
+ * authoring, heat/stealth/difficulty/allied-strike systems) and the downloadable offline desktop
+ * app (bundled Postgres/MinIO, no internet required to run). STARTER/CREATOR/PRO numbers are
+ * unchanged from spec — those tiers get the same new features as a value-add, not a repricing
+ * trigger, since desktop/RTS access doesn't gate on tier today (see `features` note above: this
+ * list is descriptive, not an entitlement check). */
 export const PLAN: Record<PlanTier, PlanDefinition> = {
-  STARTER: { priceUsd: 0, feePct: 20, projects: 1, assets: 20, teamMembers: 1 },
-  CREATOR: { priceUsd: 19, feePct: 15, projects: 10, assets: 250, teamMembers: 1 },
-  PRO: { priceUsd: 49, feePct: 12, projects: -1, assets: 2500, teamMembers: 3 },
-  STUDIO: { priceUsd: 149, feePct: 10, projects: -1, assets: -1, teamMembers: 10 },
-  ENTERPRISE: { priceUsd: 999, feePct: 10, projects: -1, assets: -1, teamMembers: -1 },
+  STARTER: {
+    priceUsd: 0,
+    feePct: 20,
+    projects: 1,
+    assets: 20,
+    teamMembers: 1,
+    features: ['1 project, 20 assets', 'Browser-based Player & Studio', 'Community support'],
+  },
+  CREATOR: {
+    priceUsd: 19,
+    feePct: 15,
+    projects: 10,
+    assets: 250,
+    teamMembers: 1,
+    features: ['10 projects, 250 assets', 'Sell on the marketplace', 'Downloadable desktop app'],
+  },
+  PRO: {
+    priceUsd: 49,
+    feePct: 12,
+    projects: -1,
+    assets: 2500,
+    teamMembers: 3,
+    features: ['Unlimited projects, 2,500 assets', '3-person team', 'Priority asset-processing queue'],
+  },
+  STUDIO: {
+    priceUsd: 199,
+    feePct: 10,
+    projects: -1,
+    assets: -1,
+    teamMembers: 15,
+    features: [
+      'Unlimited projects & assets',
+      '15-person team (was 10)',
+      'Full RTS / Global Dominance strategy-game creation tools',
+      'Desktop app for the whole team',
+      'Priority build queue',
+    ],
+  },
+  ENTERPRISE: {
+    priceUsd: 1499,
+    feePct: 10,
+    projects: -1,
+    assets: -1,
+    teamMembers: -1,
+    features: [
+      'Everything in Studio, unlimited team',
+      'Self-hosted / offline desktop deployment license',
+      'Dedicated onboarding & support',
+      'Negotiable platform fee',
+    ],
+  },
 };
 
 /** Base marketplace split: creator 85 / platform 15. */

@@ -9,6 +9,7 @@ import {
   type RTSMode,
   type CameraModeContext,
 } from '@sonic-gameworld/spatial-engine';
+import { isThermallyExposed } from '@sonic-gameworld/rts-sim';
 import { createEmptyWorld } from '@sonic-gameworld/world-schema';
 import { useRtsStore } from '../../lib/rts/store';
 import { buildAttackCommand, buildMoveCommand } from '../../lib/rts/commands';
@@ -268,6 +269,7 @@ export function RtsViewport({ mapWidthM, mapDepthM, ownerId, runtime }: RtsViewp
         const w = container!.clientWidth;
         const h = container!.clientHeight;
         const selected = new Set(useRtsStore.getState().selectedUnitIds);
+        const viewerFactionId = useRtsStore.getState().localFactionId;
         const markers: UnitScreenMarker[] = match.entities.units
           .filter((u) => u.state !== 'DEAD')
           .map((u) => ({
@@ -278,6 +280,10 @@ export function RtsViewport({ mapWidthM, mapDepthM, ownerId, runtime }: RtsViewp
             health: u.health,
             maxHealth: u.maxHealth,
             isSelected: selected.has(u.id),
+            heat: u.heat,
+            // Only an *enemy* unit reads as "detected" (docs/RTS-CONTRACTS.md §9's stealth/heat
+            // system) — a unit is never detected relative to its own faction.
+            isThermallyDetected: u.factionId !== viewerFactionId && isThermallyExposed(u),
           }));
         runtime.setUnitMarkers(markers);
       }

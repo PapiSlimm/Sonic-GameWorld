@@ -5,8 +5,8 @@
     "moduleResolution": "NodeNext",
     "rootDir": ".",
     "outDir": "dist",
-    "declaration": false,
-    "declarationMap": false,
+    "declaration": true,
+    "declarationMap": true,
     "noEmit": true
   },
   "include": [

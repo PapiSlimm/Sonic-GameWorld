@@ -62,16 +62,24 @@ sonic-gameworld/
 * RBAC roles: `owner | admin | editor | viewer | player | moderator | platform_admin`.
 * Fastify decorators: `request.user` (`AuthContext | null`), `fastify.authenticate` preHandler, `fastify.requireRole(...)`.
 
-## 4. Plan tiers & economics (exact numbers from spec)
+## 4. Plan tiers & economics
+
+STARTER/CREATOR/PRO are unchanged from the original spec. STUDIO and ENTERPRISE were repriced
+(149->199, 999->1499; STUDIO's team seats 10->15) to reflect what those tiers actually include
+now, beyond the original numeric-limits-only table below: the full RTS / "Global Dominance"
+real-time-strategy creation toolset and the downloadable offline desktop app (see
+`packages/world-schema/src/enums.ts`'s `PLAN.<tier>.features` for the exact marketing copy shown
+on the pricing table — that list is descriptive only, not an entitlement check; every tier can use
+the desktop app and RTS tools today).
 
 ```ts
 type PlanTier = 'STARTER' | 'CREATOR' | 'PRO' | 'STUDIO' | 'ENTERPRISE'
 const PLAN = {
-  STARTER:    { priceUsd: 0,   feePct: 20, projects: 1,  assets: 20,  teamMembers: 1  },
-  CREATOR:    { priceUsd: 19,  feePct: 15, projects: 10, assets: 250, teamMembers: 1  },
-  PRO:        { priceUsd: 49,  feePct: 12, projects: -1, assets: 2500,teamMembers: 3  },
-  STUDIO:     { priceUsd: 149, feePct: 10, projects: -1, assets: -1,  teamMembers: 10 },
-  ENTERPRISE: { priceUsd: 999, feePct: 10, projects: -1, assets: -1,  teamMembers: -1 }, // fee negotiated; default 10
+  STARTER:    { priceUsd: 0,    feePct: 20, projects: 1,  assets: 20,  teamMembers: 1  },
+  CREATOR:    { priceUsd: 19,   feePct: 15, projects: 10, assets: 250, teamMembers: 1  },
+  PRO:        { priceUsd: 49,   feePct: 12, projects: -1, assets: 2500,teamMembers: 3  },
+  STUDIO:     { priceUsd: 199,  feePct: 10, projects: -1, assets: -1,  teamMembers: 15 },
+  ENTERPRISE: { priceUsd: 1499, feePct: 10, projects: -1, assets: -1,  teamMembers: -1 }, // fee negotiated; default 10
 }
 ```
 Base split 85 / 15. Prices are stored as integer **cents**. Currency `USD`.

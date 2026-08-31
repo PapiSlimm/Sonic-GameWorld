@@ -14,6 +14,14 @@ export interface UnitScreenMarker {
   health: number;
   maxHealth: number;
   isSelected: boolean;
+  /** Current `RTSUnit.heat` (docs/RTS-CONTRACTS.md §9's munition/heat system), 0..~1.2 — see
+   * `RtsUnitOverlay`'s heat gauge, shown for a selected unit alongside its health bar. */
+  heat: number;
+  /** True when this is an enemy unit currently thermally exposed (heat-revealed regardless of
+   * fog-of-war/cover, §9's `isThermallyExposed`) to the local viewer — drives `RtsUnitOverlay`'s
+   * "Detected" stealth-broken indicator. Always false for the viewer's own units — a unit is never
+   * "detected" to its own side. */
+  isThermallyDetected: boolean;
 }
 
 export type FeedbackMarkerKind = 'MOVE' | 'ATTACK_MOVE';

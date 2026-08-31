@@ -4,7 +4,14 @@ export const PACKAGE_NAME = '@sonic-gameworld/spatial-engine';
 export { SpatialEngine } from './engine/SpatialEngine.js';
 export { CameraController, type TargetSample } from './camera/CameraController.js';
 export { createRenderer, NullRenderer, type CreateRendererOptions } from './engine/renderer.js';
-export { EntityRegistry, ENTITY_KIND_TO_LAYER, type EntitySlot, type ResolveAssetUrl } from './engine/entities.js';
+export {
+  EntityRegistry,
+  ENTITY_KIND_TO_LAYER,
+  GEOMETRY_BUCKET_METADATA_KEY,
+  TEAM_COLOR_METADATA_KEY,
+  type EntitySlot,
+  type ResolveAssetUrl,
+} from './engine/entities.js';
 export { DetectionOverlay } from './engine/detection.js';
 
 // ---- RTS integration (docs/RTS-CONTRACTS.md §6) ----
@@ -54,6 +61,7 @@ export type {
   LayerState,
 } from './types.js';
 export { ENTITY_KIND_COLORS, ENTITY_KIND_RADIUS, RENDERABLE_KINDS } from './types.js';
+export type { RTSUnitGeometryBucket, RTSBuildingGeometryBucket } from './types.js';
 
 // ---- Spatial discovery (marketplace globe) ----
 export {

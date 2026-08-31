@@ -144,6 +144,10 @@ export interface CreateRtsSessionInput {
   difficulty?: RtsDifficulty;
 }
 export interface RtsSessionResult { session: GameSession; rts: RtsSessionInfo }
+/** Host-only, lobby-only difficulty change (docs/RTS-CONTRACTS.md §9's difficulty picker) — see
+ * `PATCH /v1/sessions/:id/rts/difficulty`. Applies to any faction still AI-controlled once the
+ * match starts; a difficulty picked here flows into `RtsMatchStartPayload.difficulty` unchanged. */
+export interface UpdateRtsDifficultyInput { difficulty: RtsDifficulty }
 export interface RtsJoinInput { factionId?: string }
 export interface RtsReadyResult { session: GameSession; rts: RtsSessionInfo; started: boolean }
 /** `RTS_MATCH_START` realtime broadcast payload (`RealtimeMessage<RtsMatchStartPayload>`), carrying

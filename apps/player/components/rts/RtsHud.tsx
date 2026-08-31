@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Trophy, UserCheck, Video } from 'lucide-react';
+import { AlertTriangle, Swords, Trophy, UserCheck, Video } from 'lucide-react';
 import { Badge, Button, Kbd } from '@sonic-gameworld/ui';
 import { RTS_FACTIONS, type RTSMatchState } from '@sonic-gameworld/rts-sim';
 import { factionColor } from './rtsTheme';
@@ -11,6 +11,10 @@ export interface RtsHudProps {
   selectedUnitIds: string[];
   possessedUnitId: string | null;
   desynced: boolean;
+  /** docs/RTS-CONTRACTS.md §9: the faction id currently mid coordinated-strike (Pro-difficulty
+   * allied-nation ambush), or null — see `lib/rts/alliedStrike.ts`. Rendered as a clear warning
+   * banner per the spec's explicit "not a silent ambush" instruction. */
+  alliedStrikeFactionId: string | null;
   onPossess: (unitId: string) => void;
   onReleasePossession: () => void;
 }
@@ -29,7 +33,16 @@ function factionName(factionId: string | undefined | null): string {
  * therefore the `keydown` listener; this component only documents the keybind via the `<Kbd>` hint
  * next to the release button so the affordance is discoverable without a keypress.
  */
-export function RtsHud({ match, localFactionId, selectedUnitIds, possessedUnitId, desynced, onPossess, onReleasePossession }: RtsHudProps) {
+export function RtsHud({
+  match,
+  localFactionId,
+  selectedUnitIds,
+  possessedUnitId,
+  desynced,
+  alliedStrikeFactionId,
+  onPossess,
+  onReleasePossession,
+}: RtsHudProps) {
   const soleSelectedId = selectedUnitIds.length === 1 ? selectedUnitIds[0] : undefined;
   const canPossessSelection = !!soleSelectedId && soleSelectedId !== possessedUnitId;
   const gameOver = match.status === 'GAME_OVER';
@@ -50,6 +63,15 @@ export function RtsHud({ match, localFactionId, selectedUnitIds, possessedUnitId
           </Badge>
         )}
       </div>
+
+      {alliedStrikeFactionId && (
+        <div className="pointer-events-auto mx-auto flex items-center gap-2 rounded-panel border border-danger/60 bg-danger/20 px-4 py-2 text-center backdrop-blur">
+          <Swords className="h-4 w-4 shrink-0 text-danger" aria-hidden />
+          <span className="text-sm font-medium text-text">
+            {factionName(alliedStrikeFactionId)} has called in allied reinforcements — a coordinated strike is inbound!
+          </span>
+        </div>
+      )}
 
       {gameOver && (
         <div className="pointer-events-auto mx-auto flex flex-col items-center gap-2 rounded-panel border border-border bg-panel/95 px-6 py-5 text-center backdrop-blur">

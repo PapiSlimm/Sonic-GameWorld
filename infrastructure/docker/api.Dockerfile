@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Sonic GameWorld API image (services/api) — multi-stage, turbo-pruned, pnpm-only.
 #
 # Build from the REPO ROOT so the full monorepo is in the build context:
@@ -6,7 +7,6 @@
 # `prisma generate` runs during the build (this stage). This requires normal internet access to
 # fetch Prisma's query-engine binaries from binaries.prisma.sh — true for both Render and GitHub
 # Actions builds; it is NOT expected to work in network-restricted sandboxes.
-syntax=docker/dockerfile:1
 
 FROM node:20-slim AS base
 RUN corepack enable && corepack prepare pnpm@10.28.0 --activate
